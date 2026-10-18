@@ -1,0 +1,80 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Editar anotação | DevStudy</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='style.css') }}"
+    >
+</head>
+
+<body>
+    <header>
+        <h1>DevStudy</h1>
+        <p>Atualize seu conhecimento.</p>
+    </header>
+
+    <main>
+        <section>
+            <h2>Editar anotação</h2>
+
+            <form method="POST">
+                <label for="titulo">Título</label>
+                <input
+                    type="text"
+                    id="titulo"
+                    name="titulo"
+                    value="{{ anotacao['titulo'] }}"
+                    required
+                >
+
+                <label for="categoria">Categoria de estudo</label>
+                <select id="categoria" name="categoria" required>
+                    {% for categoria in categorias %}
+                        <option
+                            value="{{ categoria }}"
+                            {% if anotacao['categoria'] == categoria %}
+                                selected
+                            {% endif %}
+                        >
+                            {{ categoria }}
+                        </option>
+                    {% endfor %}
+                </select>
+
+                <label for="materia">Matéria ou tecnologia</label>
+                <input
+                    type="text"
+                    id="materia"
+                    name="materia"
+                    value="{{ anotacao['materia'] }}"
+                    required
+                >
+
+                <label for="conteudo">Conteúdo</label>
+                <textarea
+                    id="conteudo"
+                    name="conteudo"
+                    rows="8"
+                    required
+                >{{ anotacao['conteudo'] }}</textarea>
+
+                <button type="submit">Salvar alterações</button>
+
+                <a href="{{ url_for('inicio') }}">
+                    Cancelar e voltar
+                </a>
+            </form>
+        </section>
+    </main>
+
+    <footer>
+        <p>DevStudy — Aprender, praticar e evoluir.</p>
+    </footer>
+</body>
+</html>
