@@ -24,11 +24,20 @@
             <h2>Editar anotação</h2>
 
             <form method="POST">
+
+                <!-- Token de segurança CSRF -->
+                <input
+                    type="hidden"
+                    name="csrf_token"
+                    value="{{ csrf_token() }}"
+                >
+
                 <label for="titulo">Título</label>
                 <input
                     type="text"
                     id="titulo"
                     name="titulo"
+                    maxlength="100"
                     value="{{ anotacao['titulo'] }}"
                     required
                 >
@@ -52,6 +61,7 @@
                     type="text"
                     id="materia"
                     name="materia"
+                    maxlength="60"
                     value="{{ anotacao['materia'] }}"
                     required
                 >
@@ -61,6 +71,7 @@
                     id="conteudo"
                     name="conteudo"
                     rows="8"
+                    maxlength="10000"
                     required
                 >{{ anotacao['conteudo'] }}</textarea>
 

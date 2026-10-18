@@ -4,80 +4,58 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>DevStudy | Minha biblioteca de estudos</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='style.css') }}"
+    >
 </head>
 
 <body>
-    <header>
-        <h1>DevStudy</h1>
-        <p>Sua biblioteca pessoal de conhecimento.</p>
-        <a href="{{ url_for('historico') }}">📚 Histórico de estudos</a>
+
+    <!-- Cabeçalho -->
+    <header class="cabecalho-principal">
+        <div class="cabecalho-conteudo">
+
+            <a href="{{ url_for('inicio') }}" class="marca-devstudy">
+                <span class="marca-icone">D</span>
+                <span>DevStudy</span>
+            </a>
+
+            <p>Sua biblioteca pessoal de conhecimento.</p>
+
+            <nav class="navegacao-principal" aria-label="Navegação principal">
+                <a href="#painel">Visão geral</a>
+                <a href="#pomodoro">Pomodoro</a>
+                <a href="#meta">Meta diária</a>
+                <a href="#nova-anotacao">Nova anotação</a>
+                <a href="#biblioteca">Biblioteca</a>
+                <a href="{{ url_for('historico') }}">Histórico de estudos ↗</a>
+            </nav>
+
+        </div>
     </header>
 
     <main>
-        
 
-<!-- Cronômetro Pomodoro -->
-<section class="pomodoro">
-    <h2>🍅 Foco Pomodoro</h2>
-    <p>Escolha uma matéria e concentre-se nos estudos.</p>
+        <!-- Mensagens de feedback do Flask -->
+        {% with mensagens = get_flashed_messages(with_categories=true) %}
+            {% if mensagens %}
+                <section class="mensagens-flash" aria-live="polite">
+                    {% for categoria, mensagem in mensagens %}
+                        <div class="mensagem-flash mensagem-{{ categoria }}">
+                            {{ mensagem }}
+                        </div>
+                    {% endfor %}
+                </section>
+            {% endif %}
+        {% endwith %}
 
-    <form
-        id="form-pomodoro"
-        action="{{ url_for('registrar_estudo') }}"
-        method="POST"
-    >
-        <label for="materia-pomodoro">Matéria de estudo</label>
+        <!-- Estatísticas da biblioteca -->
+        <section class="painel-estatisticas" id="painel">
 
-        <select
-            id="materia-pomodoro"
-            name="materia"
-            required
-        >
-            <option value="Python">Python</option>
-            <option value="JavaScript">JavaScript</option>
-            <option value="Banco de dados">Banco de dados</option>
-            <option value="Redes de computadores">
-                Redes de computadores
-            </option>
-            <option value="Faculdade - ADS">Faculdade - ADS</option>
-            <option value="Geral">Geral</option>
-        </select>
-
-        <input
-            type="hidden"
-            name="duracao_minutos"
-            value="25"
-        >
-
-        <div id="visor-pomodoro" class="visor-pomodoro">
-            25:00
-        </div>
-
-        <div class="botoes-pomodoro">
-            <button type="button" onclick="iniciarPomodoro()">
-                Iniciar
-            </button>
-
-            <button type="button" onclick="pausarPomodoro()">
-                Pausar
-            </button>
-
-            <button type="button" onclick="reiniciarPomodoro()">
-                Reiniciar
-            </button>
-        </div>
-    </form>
-
-    <p id="status-pomodoro" class="dica-pomodoro" aria-live="polite">
-        Pronto para começar?
-    </p>
-</section>
-
-
-        <!-- Estatísticas gerais -->
-        <section class="painel-estatisticas">
             <article class="cartao-estatistica">
                 <span>Total de anotações</span>
                 <strong>{{ total_anotacoes }}</strong>
@@ -97,14 +75,104 @@
                 <span>Categorias utilizadas</span>
                 <strong>{{ total_categorias }}</strong>
             </article>
+
         </section>
 
-        <!-- Meta diária de estudos -->
-        <section class="secao-meta">
+        <!-- Cronômetro Pomodoro -->
+        <section class="pomodoro" id="pomodoro">
+
+            <h2>🍅 Foco Pomodoro</h2>
+
+            <p>Escolha uma matéria e concentre-se nos estudos.</p>
+
+            <form
+                id="form-pomodoro"
+                action="{{ url_for('registrar_estudo') }}"
+                method="POST"
+            >
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <input
+                    type="hidden"
+                    name="identificador"
+                    id="identificador-sessao"
+                >
+
+                <label for="materia-pomodoro">Matéria de estudo</label>
+
+                <select id="materia-pomodoro" name="materia" required>
+                    <option value="Python">Python</option>
+                    <option value="JavaScript">JavaScript</option>
+                    <option value="Banco de dados">Banco de dados</option>
+                    <option value="Redes de computadores">Redes de computadores</option>
+                    <option value="Faculdade - ADS">Faculdade - ADS</option>
+                    <option value="Geral">Geral</option>
+                </select>
+
+                <input
+                    type="hidden"
+                    name="duracao_minutos"
+                    value="25"
+                >
+
+                <div
+                    id="visor-pomodoro"
+                    class="visor-pomodoro"
+                    role="timer"
+                    aria-live="off"
+                >
+                    25:00
+                </div>
+
+                <div class="botoes-pomodoro">
+
+                    <button
+                        type="button"
+                        id="botao-iniciar-pomodoro"
+                        onclick="iniciarPomodoro()"
+                    >
+                        Iniciar
+                    </button>
+
+                    <button
+                        type="button"
+                        id="botao-pausar-pomodoro"
+                        onclick="pausarPomodoro()"
+                    >
+                        Pausar
+                    </button>
+
+                    <button
+                        type="button"
+                        id="botao-reiniciar-pomodoro"
+                        onclick="reiniciarPomodoro()"
+                    >
+                        Reiniciar
+                    </button>
+
+                </div>
+
+            </form>
+
+            <p
+                id="status-pomodoro"
+                class="dica-pomodoro"
+                aria-live="polite"
+            >
+                Pronto para começar?
+            </p>
+
+        </section>
+
+        <!-- Meta diária e registro manual -->
+        <section class="secao-meta" id="meta">
+
             <h2>Minha meta diária</h2>
+
             <p>Defina seu objetivo e acompanhe seu progresso de hoje.</p>
 
             <div class="resumo-meta">
+
                 <div>
                     <span>Meta diária</span>
                     <strong>{{ minutos_meta }} min</strong>
@@ -119,6 +187,7 @@
                     <span>Faltam</span>
                     <strong>{{ minutos_restantes }} min</strong>
                 </div>
+
             </div>
 
             <div
@@ -146,7 +215,12 @@
             {% endif %}
 
             <!-- Alterar meta diária -->
-            <form action="{{ url_for('definir_meta') }}" method="POST">
+            <form
+                action="{{ url_for('definir_meta') }}"
+                method="POST"
+            >
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
                 <h3>Alterar meta diária</h3>
 
                 <label for="minutos_meta">
@@ -164,22 +238,36 @@
                 >
 
                 <button type="submit">Salvar meta</button>
+
             </form>
 
-            <!-- Registrar sessão de estudo -->
-            <form action="{{ url_for('registrar_estudo') }}" method="POST">
+            <!-- Registro manual de estudo -->
+            <form
+                id="form-registro-manual"
+                action="{{ url_for('registrar_estudo') }}"
+                method="POST"
+                onsubmit="return prepararRegistroManual(this);"
+            >
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
                 <h3>Registrar sessão de estudo</h3>
+
+                <input
+                    type="hidden"
+                    name="identificador"
+                    class="identificador-manual"
+                >
 
                 <label for="materia-estudo">Matéria estudada</label>
 
-                <input
-                    type="text"
-                    id="materia-estudo"
-                    name="materia"
-                    placeholder="Ex.: Python, SQL, Redes..."
-                    maxlength="150"
-                    required
-                >
+                <select id="materia-estudo" name="materia" required>
+                    <option value="Python">Python</option>
+                    <option value="JavaScript">JavaScript</option>
+                    <option value="Banco de dados">Banco de dados</option>
+                    <option value="Redes de computadores">Redes de computadores</option>
+                    <option value="Faculdade - ADS">Faculdade - ADS</option>
+                    <option value="Geral">Geral</option>
+                </select>
 
                 <label for="duracao_minutos">Duração em minutos</label>
 
@@ -194,21 +282,31 @@
                 >
 
                 <button type="submit">Registrar estudo</button>
+
             </form>
+
         </section>
 
-        <!-- Cadastro de anotação -->
-        <section>
+        <!-- Cadastro de anotações -->
+        <section id="nova-anotacao">
+
             <h2>Nova anotação</h2>
+
             <p>Registre conceitos, comandos, resumos e aprendizados.</p>
 
-            <form action="{{ url_for('nova_anotacao') }}" method="POST">
+            <form
+                action="{{ url_for('nova_anotacao') }}"
+                method="POST"
+            >
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
                 <label for="titulo">Título da anotação</label>
 
                 <input
                     type="text"
                     id="titulo"
                     name="titulo"
+                    maxlength="150"
                     placeholder="Ex.: O que é uma variável?"
                     required
                 >
@@ -229,6 +327,7 @@
                     type="text"
                     id="materia"
                     name="materia"
+                    maxlength="100"
                     placeholder="Ex.: Python, SQL, Matemática..."
                     required
                 >
@@ -239,25 +338,31 @@
                     id="conteudo"
                     name="conteudo"
                     rows="6"
+                    maxlength="20000"
                     placeholder="Escreva aqui o que você aprendeu..."
                     required
                 ></textarea>
 
                 <button type="submit">Salvar anotação</button>
+
             </form>
+
         </section>
 
         <!-- Biblioteca de anotações -->
-        <section>
+        <section id="biblioteca">
+
             <h2>Minha biblioteca</h2>
+
             <p>Consulte, pesquise e filtre seus aprendizados.</p>
 
-            <!-- Pesquisa e filtros -->
+            <!-- Pesquisa e filtros: GET não precisa de token CSRF -->
             <form
                 action="{{ url_for('inicio') }}"
                 method="GET"
                 class="form-pesquisa"
             >
+
                 <label for="pesquisa">Pesquisar anotações</label>
 
                 <input
@@ -271,36 +376,45 @@
                 <label for="materia-filtro">Filtrar por matéria</label>
 
                 <select id="materia-filtro" name="materia">
+
                     <option value="">Todas as matérias</option>
 
                     {% for item in materias %}
                         <option
                             value="{{ item['materia'] }}"
-                            {% if materia_selecionada == item['materia'] %}selected{% endif %}
+                            {% if materia_selecionada == item['materia'] %}
+                                selected
+                            {% endif %}
                         >
                             {{ item['materia'] }}
                         </option>
                     {% endfor %}
+
                 </select>
 
                 <label for="categoria-filtro">Filtrar por categoria</label>
 
                 <select id="categoria-filtro" name="categoria">
+
                     <option value="">Todas as categorias</option>
 
                     {% for categoria in categorias %}
                         <option
                             value="{{ categoria }}"
-                            {% if categoria_selecionada == categoria %}selected{% endif %}
+                            {% if categoria_selecionada == categoria %}
+                                selected
+                            {% endif %}
                         >
                             {{ categoria }}
                         </option>
                     {% endfor %}
+
                 </select>
 
                 <label for="favoritas">Exibir favoritos</label>
 
                 <select id="favoritas" name="favoritas">
+
                     <option
                         value=""
                         {% if not somente_favoritas %}selected{% endif %}
@@ -314,18 +428,28 @@
                     >
                         Somente favoritas
                     </option>
+
                 </select>
 
                 <div class="acoes-pesquisa">
+
                     <button type="submit">Pesquisar</button>
-                    <a href="{{ url_for('inicio') }}">Limpar filtros</a>
+
+                    <a href="{{ url_for('inicio') }}">
+                        Limpar filtros
+                    </a>
+
                 </div>
+
             </form>
 
             <!-- Resultados da biblioteca -->
             {% if anotacoes %}
+
                 {% for anotacao in anotacoes %}
+
                     <article class="cartao-anotacao">
+
                         <h3>{{ anotacao["titulo"] }}</h3>
 
                         <p class="linha-categoria">
@@ -339,20 +463,21 @@
                             {{ anotacao["materia"] }}
                         </p>
 
-                        <p class="conteudo-anotacao">
-                            {{ anotacao["conteudo"] }}
-                        </p>
+                        <p class="conteudo-anotacao">{{ anotacao["conteudo"] }}</p>
 
                         <small>
                             Criada em: {{ anotacao["criado_em"] }}
                         </small>
 
-                        <!-- Ações da anotação -->
                         <div class="acoes-anotacao">
+
+                            <!-- Favoritar -->
                             <form
                                 action="{{ url_for('favoritar_anotacao', id=anotacao['id']) }}"
                                 method="POST"
                             >
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
                                 <button
                                     class="botao-favorito {% if anotacao['favorita'] == 1 %}favorito-ativo{% endif %}"
                                     type="submit"
@@ -363,8 +488,10 @@
                                         ☆ Favoritar
                                     {% endif %}
                                 </button>
+
                             </form>
 
+                            <!-- Editar -->
                             <a
                                 class="botao-editar"
                                 href="{{ url_for('editar_anotacao', id=anotacao['id']) }}"
@@ -372,27 +499,40 @@
                                 Editar
                             </a>
 
+                            <!-- Excluir -->
                             <form
                                 action="{{ url_for('excluir_anotacao', id=anotacao['id']) }}"
                                 method="POST"
                                 onsubmit="return confirm('Tem certeza de que deseja excluir esta anotação?');"
                             >
-                                <button class="botao-excluir" type="submit">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                                <button
+                                    class="botao-excluir"
+                                    type="submit"
+                                >
                                     Excluir
                                 </button>
+
                             </form>
+
                         </div>
+
                     </article>
+
                 {% endfor %}
 
             {% else %}
-                <article>
+
+                <article class="estado-vazio">
+
                     {% if somente_favoritas %}
+
                         <h3>Nenhuma anotação favorita ainda</h3>
 
                         <p>
                             Você ainda não favoritou nenhuma anotação.
-                            Clique em ☆ Favoritar para guardar seus conteúdos
+                            Clique em “Favoritar” para guardar seus conteúdos
                             mais importantes.
                         </p>
 
@@ -401,6 +541,7 @@
                         </a>
 
                     {% elif pesquisa or materia_selecionada or categoria_selecionada %}
+
                         <h3>Nenhum resultado encontrado</h3>
 
                         <p>
@@ -408,26 +549,78 @@
                         </p>
 
                         <a href="{{ url_for('inicio') }}">
-                            Ver todas as anotações
+                            Limpar pesquisa e filtros
                         </a>
 
                     {% else %}
+
                         <h3>Sua biblioteca está começando!</h3>
 
                         <p>
                             Registre seu primeiro aprendizado no formulário acima.
                         </p>
+
                     {% endif %}
+
                 </article>
+
             {% endif %}
+
         </section>
+
     </main>
 
-    <footer>
+    <!-- Rodapé -->
+    <footer class="rodape">
         <p>DevStudy — Aprender, praticar e evoluir.</p>
     </footer>
 
-    <script src="{{ url_for('static', filename='pomodoro.js') }}"></script>
+    <!-- JavaScript do Pomodoro -->
+    <script src="{{ url_for('static', filename='pomodoro.js') }}" defer></script>
+
+    <!-- JavaScript do registro manual -->
+    <script>
+        function prepararRegistroManual(formulario) {
+            if (formulario.dataset.enviando === "true") {
+                return false;
+            }
+
+            const campoIdentificador = formulario.querySelector(
+                ".identificador-manual"
+            );
+
+            if (!campoIdentificador) {
+                alert("Não foi possível preparar o registro.");
+                return false;
+            }
+
+            if (
+                !window.crypto ||
+                typeof window.crypto.randomUUID !== "function"
+            ) {
+                alert(
+                    "Seu navegador não conseguiu gerar um identificador. " +
+                    "Tente abrir o DevStudy em http://127.0.0.1:5000."
+                );
+
+                return false;
+            }
+
+            campoIdentificador.value = window.crypto.randomUUID();
+            formulario.dataset.enviando = "true";
+
+            const botoes = formulario.querySelectorAll(
+                'button[type="submit"]'
+            );
+
+            botoes.forEach((botao) => {
+                botao.disabled = true;
+                botao.textContent = "Registrando...";
+            });
+
+            return true;
+        }
+    </script>
 
 </body>
 </html>

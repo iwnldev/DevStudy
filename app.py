@@ -1,9 +1,20 @@
 
 from flask import Flask, render_template, request, redirect, url_for
+from flask_wtf.csrf import CSRFProtect
+import os
+import uuid
 
 from database import conectar, criar_tabelas
 
 app = Flask(__name__)
+
+app.config["SECRET_KEY"] = os.environ.get("DEVSTUDY_SECRET_KEY")
+
+csrf = CSRFProtect(app)
+
+# ==========================================
+# CONFIGURAÇÕES
+# ==========================================
 
 # Categorias disponíveis no DevStudy
 CATEGORIAS = [
@@ -15,9 +26,68 @@ CATEGORIAS = [
     "Outros"
 ]
 
+# Matérias permitidas para registrar sessões de estudo
+MATERIAS_ESTUDO = [
+    "Python",
+    "JavaScript",
+    "Banco de dados",
+    "Redes de computadores",
+    "Faculdade - ADS",
+    "Geral"
+]
+
+
+# ==========================================
+# FUNÇÕES DE VALIDAÇÃO
+# ==========================================
+
+def validar_texto(valor, limite):
+    """
+    Remove espaços desnecessários e verifica
+    se o texto está preenchido e dentro do limite.
+    """
+    if not isinstance(valor, str):
+        return None
+
+    texto = valor.strip()
+
+    if not texto:
+        return None
+
+    if len(texto) > limite:
+        return None
+
+    return texto
+
+
+def validar_inteiro(valor, minimo, maximo):
+    """
+    Converte um valor para inteiro e verifica
+    se está dentro do intervalo permitido.
+    """
+    if not isinstance(valor, str):
+        return None
+
+    valor = valor.strip()
+
+    if not valor or not valor.isdecimal():
+        return None
+
+    numero = int(valor)
+
+    if not minimo <= numero <= maximo:
+        return None
+
+    return numero
+
+
 # Garante que as tabelas existam e estejam atualizadas
 criar_tabelas()
 
+
+# ==========================================
+# PÁGINA INICIAL
+# ==========================================
 
 @app.route("/")
 def inicio():
@@ -26,6 +96,9 @@ def inicio():
     materia_selecionada = request.args.get("materia", "").strip()
     categoria_selecionada = request.args.get("categoria", "").strip()
     somente_favoritas = request.args.get("favoritas") == "1"
+
+    # Limita o tamanho da pesquisa
+    pesquisa = pesquisa[:200]
 
     # Prepara a consulta SQL das anotações
     sql = "SELECT * FROM anotacoes"
@@ -67,13 +140,11 @@ def inicio():
         ).fetchall()
 
         # Busca as matérias para o filtro
-        materias = conexao.execute(
-            """
+        materias = conexao.execute("""
             SELECT DISTINCT materia
             FROM anotacoes
             ORDER BY materia
-            """
-        ).fetchall()
+        """).fetchall()
 
         # Estatísticas gerais
         total_anotacoes = conexao.execute(
@@ -93,20 +164,20 @@ def inicio():
         ).fetchone()[0]
 
         # Busca a meta diária configurada
-        meta = conexao.execute(
-            "SELECT minutos_meta FROM meta_diaria WHERE id = 1"
-        ).fetchone()
+        meta = conexao.execute("""
+            SELECT minutos_meta
+            FROM meta_diaria
+            WHERE id = 1
+        """).fetchone()
 
         minutos_meta = meta["minutos_meta"] if meta else 60
 
         # Soma os minutos estudados hoje
-        minutos_estudados = conexao.execute(
-            """
+        minutos_estudados = conexao.execute("""
             SELECT COALESCE(SUM(duracao_minutos), 0)
             FROM sessoes_estudo
             WHERE data_estudo = date('now', 'localtime')
-            """
-        ).fetchone()[0]
+        """).fetchone()[0]
 
     # Calcula o progresso da meta
     if minutos_meta > 0:
@@ -144,123 +215,186 @@ def inicio():
     )
 
 
+# ==========================================
+# CADASTRAR ANOTAÇÃO
+# ==========================================
+
 @app.route("/nova-anotacao", methods=["POST"])
 def nova_anotacao():
-    # Recebe os dados do formulário
-    titulo = request.form.get("titulo", "").strip()
-    materia = request.form.get("materia", "").strip()
-    conteudo = request.form.get("conteudo", "").strip()
-    categoria = request.form.get("categoria", "Geral").strip()
+    # Recebe e valida os dados do formulário
+    titulo = validar_texto(
+        request.form.get("titulo", ""),
+        100
+    )
 
-    # Valida os dados
+    materia = validar_texto(
+        request.form.get("materia", ""),
+        60
+    )
+
+    conteudo = validar_texto(
+        request.form.get("conteudo", ""),
+        10000
+    )
+
+    categoria = validar_texto(
+        request.form.get("categoria", "Geral"),
+        60
+    )
+
+    # Verifica se todos os campos são válidos
     if (
-        titulo
-        and materia
-        and conteudo
-        and categoria in CATEGORIAS
+        titulo is None
+        or materia is None
+        or conteudo is None
+        or categoria not in CATEGORIAS
     ):
-        with conectar() as conexao:
-            conexao.execute(
-                """
-                INSERT INTO anotacoes
-                    (titulo, materia, conteudo, categoria)
-                VALUES (?, ?, ?, ?)
-                """,
+        return redirect(url_for("inicio"))
+
+    # Salva a anotação no banco de dados
+    with conectar() as conexao:
+        conexao.execute("""
+            INSERT INTO anotacoes
                 (titulo, materia, conteudo, categoria)
-            )
+            VALUES (?, ?, ?, ?)
+        """, (titulo, materia, conteudo, categoria))
 
     return redirect(url_for("inicio"))
 
+
+# ==========================================
+# REGISTRAR SESSÃO DE ESTUDO
+# ==========================================
 
 @app.route("/registrar-estudo", methods=["POST"])
 def registrar_estudo():
-    # Recebe os dados da sessão
-    materia = request.form.get("materia", "").strip()
-    duracao_texto = request.form.get("duracao_minutos", "").strip()
+    # Recebe os dados enviados pelo formulário
+    materia = validar_texto(
+        request.form.get("materia", ""),
+        60
+    )
 
-    # Valida a duração
-    try:
-        duracao = int(duracao_texto)
-    except (ValueError, TypeError):
+    duracao_texto = request.form.get(
+        "duracao_minutos", ""
+    )
+
+    identificador_texto = request.form.get(
+        "identificador", ""
+    ).strip()
+
+    # Valida a matéria
+    if materia not in MATERIAS_ESTUDO:
         return redirect(url_for("inicio"))
 
-    # Registra sessões de 1 a 1440 minutos
-    if materia and 1 <= duracao <= 1440:
-        with conectar() as conexao:
-            conexao.execute(
-                """
-                INSERT INTO sessoes_estudo
-                    (materia, duracao_minutos)
-                VALUES (?, ?)
-                """,
-                (materia, duracao)
-            )
+    # Converte e valida a duração
+    duracao = validar_inteiro(
+        duracao_texto,
+        1,
+        1440
+    )
+
+    if duracao is None:
+        return redirect(url_for("inicio"))
+
+    # Verifica se o identificador tem formato UUID válido
+    try:
+        identificador = str(uuid.UUID(identificador_texto))
+    except (ValueError, TypeError, AttributeError):
+        return redirect(url_for("inicio"))
+
+    # Salva a sessão sem repetir o mesmo identificador
+    with conectar() as conexao:
+        conexao.execute("""
+            INSERT INTO sessoes_estudo
+                (materia, duracao_minutos, identificador)
+            VALUES (?, ?, ?)
+            ON CONFLICT(identificador) DO NOTHING
+        """, (materia, duracao, identificador))
 
     return redirect(url_for("inicio"))
 
+
+# ==========================================
+# DEFINIR META DIÁRIA
+# ==========================================
 
 @app.route("/definir-meta", methods=["POST"])
 def definir_meta():
-    # Recebe a nova meta diária
-    minutos_texto = request.form.get("minutos_meta", "").strip()
+    # Recebe e valida a nova meta diária
+    minutos = validar_inteiro(
+        request.form.get("minutos_meta", ""),
+        1,
+        1440
+    )
 
-    try:
-        minutos = int(minutos_texto)
-    except (ValueError, TypeError):
+    if minutos is None:
         return redirect(url_for("inicio"))
 
-    # Aceita metas de 1 a 1440 minutos
-    if 1 <= minutos <= 1440:
-        with conectar() as conexao:
-            conexao.execute(
-                """
-                INSERT INTO meta_diaria (id, minutos_meta)
-                VALUES (1, ?)
-                ON CONFLICT(id)
-                DO UPDATE SET minutos_meta = excluded.minutos_meta
-                """,
-                (minutos,)
-            )
+    with conectar() as conexao:
+        conexao.execute("""
+            INSERT INTO meta_diaria (id, minutos_meta)
+            VALUES (1, ?)
+            ON CONFLICT(id)
+            DO UPDATE SET minutos_meta = excluded.minutos_meta
+        """, (minutos,))
 
     return redirect(url_for("inicio"))
 
+
+# ==========================================
+# EDITAR ANOTAÇÃO
+# ==========================================
 
 @app.route("/editar-anotacao/<int:id>", methods=["GET", "POST"])
 def editar_anotacao(id):
     with conectar() as conexao:
         # Busca a anotação
-        anotacao = conexao.execute(
-            "SELECT * FROM anotacoes WHERE id = ?",
-            (id,)
-        ).fetchone()
+        anotacao = conexao.execute("""
+            SELECT *
+            FROM anotacoes
+            WHERE id = ?
+        """, (id,)).fetchone()
 
         if anotacao is None:
             return "Anotação não encontrada.", 404
 
         # Atualiza a anotação quando o formulário é enviado
         if request.method == "POST":
-            titulo = request.form.get("titulo", "").strip()
-            materia = request.form.get("materia", "").strip()
-            conteudo = request.form.get("conteudo", "").strip()
-            categoria = request.form.get("categoria", "Geral").strip()
+            titulo = validar_texto(
+                request.form.get("titulo", ""),
+                100
+            )
 
+            materia = validar_texto(
+                request.form.get("materia", ""),
+                60
+            )
+
+            conteudo = validar_texto(
+                request.form.get("conteudo", ""),
+                10000
+            )
+
+            categoria = validar_texto(
+                request.form.get("categoria", "Geral"),
+                60
+            )
+
+            # Só atualiza se todos os campos forem válidos
             if (
-                titulo
-                and materia
-                and conteudo
+                titulo is not None
+                and materia is not None
+                and conteudo is not None
                 and categoria in CATEGORIAS
             ):
-                conexao.execute(
-                    """
+                conexao.execute("""
                     UPDATE anotacoes
                     SET titulo = ?,
                         materia = ?,
                         conteudo = ?,
                         categoria = ?
                     WHERE id = ?
-                    """,
-                    (titulo, materia, conteudo, categoria, id)
-                )
+                """, (titulo, materia, conteudo, categoria, id))
 
                 return redirect(url_for("inicio"))
 
@@ -271,48 +405,66 @@ def editar_anotacao(id):
     )
 
 
+# ==========================================
+# EXCLUIR ANOTAÇÃO
+# ==========================================
+
 @app.route("/excluir-anotacao/<int:id>", methods=["POST"])
 def excluir_anotacao(id):
     with conectar() as conexao:
-        conexao.execute(
-            "DELETE FROM anotacoes WHERE id = ?",
-            (id,)
-        )
+        conexao.execute("""
+            DELETE FROM anotacoes
+            WHERE id = ?
+        """, (id,))
 
     return redirect(url_for("inicio"))
 
+
+# ==========================================
+# FAVORITAR ANOTAÇÃO
+# ==========================================
 
 @app.route("/favoritar-anotacao/<int:id>", methods=["POST"])
 def favoritar_anotacao(id):
     with conectar() as conexao:
-        anotacao = conexao.execute(
-            "SELECT favorita FROM anotacoes WHERE id = ?",
-            (id,)
-        ).fetchone()
+        anotacao = conexao.execute("""
+            SELECT favorita
+            FROM anotacoes
+            WHERE id = ?
+        """, (id,)).fetchone()
 
         if anotacao is not None:
             novo_estado = 0 if anotacao["favorita"] == 1 else 1
 
-            conexao.execute(
-                "UPDATE anotacoes SET favorita = ? WHERE id = ?",
-                (novo_estado, id)
-            )
+            conexao.execute("""
+                UPDATE anotacoes
+                SET favorita = ?
+                WHERE id = ?
+            """, (novo_estado, id))
 
     return redirect(url_for("inicio"))
 
 
+# ==========================================
+# HISTÓRICO DE ESTUDOS
+# ==========================================
 
 @app.route("/historico")
 def historico():
     with conectar() as conexao:
         # Busca todas as sessões registradas
         sessoes = conexao.execute("""
-            SELECT id, materia, duracao_minutos, data_estudo, criado_em
+            SELECT
+                id,
+                materia,
+                duracao_minutos,
+                data_estudo,
+                criado_em
             FROM sessoes_estudo
             ORDER BY data_estudo DESC, id DESC
         """).fetchall()
 
-        # Estatísticas gerais de todo o histórico
+        # Estatísticas gerais do histórico
         resumo = conexao.execute("""
             SELECT
                 COUNT(*) AS total_sessoes,
@@ -331,11 +483,13 @@ def historico():
             ORDER BY total_minutos DESC
         """).fetchall()
 
-        # Cria os sete dias da semana atual, de segunda a domingo.
-        # Dias sem registros também aparecem, com zero minutos.
+        # Cria os sete dias da semana atual
+        # Dias sem registros também aparecem com zero minutos
         estudos_semana = conexao.execute("""
             WITH RECURSIVE semana(data) AS (
-                SELECT date('now', 'localtime', 'weekday 0', '-6 days')
+                SELECT date(
+                    'now', 'localtime', 'weekday 0', '-6 days'
+                )
 
                 UNION ALL
 
@@ -356,8 +510,9 @@ def historico():
                     WHEN '6' THEN 'Sábado'
                     WHEN '0' THEN 'Domingo'
                 END AS dia_nome,
-                COALESCE(SUM(sessoes_estudo.duracao_minutos), 0)
-                    AS total_minutos
+                COALESCE(
+                    SUM(sessoes_estudo.duracao_minutos), 0
+                ) AS total_minutos
             FROM semana
             LEFT JOIN sessoes_estudo
                 ON sessoes_estudo.data_estudo = semana.data
@@ -365,7 +520,7 @@ def historico():
             ORDER BY semana.data
         """).fetchall()
 
-    # Calcula os indicadores da semana
+    # Calcula os indicadores semanais
     total_semana = sum(
         dia["total_minutos"] for dia in estudos_semana
     )
@@ -396,5 +551,10 @@ def historico():
         melhor_dia=melhor_dia
     )
 
+
+# ==========================================
+# EXECUTAR A APLICAÇÃO
+# ==========================================
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=os.environ.get("FLASK_DEBUG") == "1")

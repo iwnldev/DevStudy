@@ -7,49 +7,100 @@
 
     <title>Histórico de Estudos | DevStudy</title>
 
-    <link rel="stylesheet"
-          href="{{ url_for('static', filename='style.css') }}">
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='style.css') }}"
+    >
 </head>
 
 <body>
-    <header>
-        <h1>Histórico de Estudos</h1>
-        <p>Acompanhe sua evolução e veja onde está investindo seu tempo.</p>
-        <a href="{{ url_for('inicio') }}">← Voltar para o início</a>
+
+    <!-- Cabeçalho -->
+    <header class="cabecalho-principal">
+        <div class="cabecalho-conteudo">
+
+            <a href="{{ url_for('inicio') }}" class="marca-devstudy">
+                <span class="marca-icone">D</span>
+                <span>DevStudy</span>
+            </a>
+
+            <p>Acompanhe sua evolução e seu progresso nos estudos.</p>
+
+            <nav class="navegacao-principal" aria-label="Navegação principal">
+                <a href="{{ url_for('inicio') }}">← Painel inicial</a>
+                <a href="#resumo">Resumo semanal</a>
+                <a href="#materias">Por matéria</a>
+                <a href="#sessoes">Todas as sessões</a>
+            </nav>
+
+        </div>
     </header>
 
-    <main>
-        <!-- Estatísticas gerais -->
-        <section class="painel-estatisticas">
-            <article class="cartao-estatistica">
-                <span>Total de sessões</span>
-                <strong>{{ resumo['total_sessoes'] }}</strong>
-            </article>
+    <main class="pagina-historico">
 
-            <article class="cartao-estatistica">
-                <span>Tempo total estudado</span>
-                <strong>{{ resumo['total_minutos'] }} min</strong>
-            </article>
+        <!-- Introdução -->
+        <section class="introducao-historico">
+            <div>
+                <span class="etiqueta-categoria">SEU PROGRESSO</span>
 
-            <article class="cartao-estatistica">
-                <span>Matérias estudadas</span>
-                <strong>{{ materias_estudadas|length }}</strong>
-            </article>
+                <h1>Histórico de estudos</h1>
+
+                <p>
+                    Cada sessão conta. Acompanhe o tempo que você investe
+                    no aprendizado e descubra sua evolução ao longo da semana.
+                </p>
+            </div>
         </section>
 
-        <!-- Resumo da semana -->
-        <section class="secao-grafico">
-            <h2>Seu desempenho nesta semana</h2>
-            <p>Veja quanto tempo você dedicou aos estudos de segunda a domingo.</p>
+        <!-- Estatísticas gerais -->
+        <section class="painel-estatisticas" aria-label="Estatísticas gerais">
 
+            <article class="cartao-estatistica">
+                <span>📚 Total de sessões</span>
+                <strong>{{ resumo['total_sessoes'] }}</strong>
+                <small>Registros de estudo</small>
+            </article>
+
+            <article class="cartao-estatistica">
+                <span>⏱️ Tempo acumulado</span>
+                <strong>{{ resumo['total_minutos'] }}</strong>
+                <small>Minutos estudados</small>
+            </article>
+
+            <article class="cartao-estatistica">
+                <span>💻 Matérias estudadas</span>
+                <strong>{{ materias_estudadas|length }}</strong>
+                <small>Matérias com registros</small>
+            </article>
+
+        </section>
+
+        <!-- Resumo semanal -->
+        <section class="secao-grafico" id="resumo">
+
+            <div class="titulo-secao-historico">
+                <span class="subtitulo-secao">ACOMPANHAMENTO</span>
+
+                <h2>Seu desempenho nesta semana</h2>
+
+                <p>
+                    Veja como seu tempo de estudo foi distribuído
+                    de segunda a domingo.
+                </p>
+            </div>
+
+            <!-- Indicadores da semana -->
             <div class="painel-semanal">
+
                 <article class="indicador-semanal">
                     <span>Tempo na semana</span>
-                    <strong>{{ total_semana }} min</strong>
-                    <small>
+
+                    <strong>
                         {{ total_semana // 60 }}h
                         {{ total_semana % 60 }}min
-                    </small>
+                    </strong>
+
+                    <small>{{ total_semana }} minutos no total</small>
                 </article>
 
                 <article class="indicador-semanal">
@@ -62,101 +113,268 @@
                     <span>Melhor dia</span>
 
                     {% if melhor_dia and melhor_dia['total_minutos'] > 0 %}
+
                         <strong>{{ melhor_dia['dia_nome'] }}</strong>
+
                         <small>
-                            {{ melhor_dia['total_minutos'] }} minutos
+                            {{ melhor_dia['total_minutos'] }}
+                            minutos estudados
                         </small>
+
                     {% else %}
+
                         <strong>--</strong>
                         <small>Registre seu primeiro estudo</small>
+
                     {% endif %}
                 </article>
+
             </div>
 
             <!-- Gráfico semanal -->
             <div class="grafico-semanal">
+
                 <h3>Minutos estudados por dia</h3>
 
-                {% for dia in estudos_semana %}
-                    <div class="linha-grafico">
-                        <div class="rotulo-grafico">
-                            <span>{{ dia['dia_nome'] }}</span>
-                            <strong>{{ dia['total_minutos'] }} min</strong>
+                <div class="lista-grafico">
+
+                    {% for dia in estudos_semana %}
+
+                        <div class="linha-grafico">
+
+                            <div class="rotulo-grafico">
+                                <span>{{ dia['dia_nome'] }}</span>
+
+                                <strong>
+                                    {{ dia['total_minutos'] }} min
+                                </strong>
+                            </div>
+
+                            <div class="barra-grafico-container">
+
+                                <progress
+                                    class="barra-grafico"
+                                    value="{{ dia['total_minutos'] }}"
+                                    max="{{ maior_tempo if maior_tempo > 0 else 1 }}"
+                                    aria-label="{{ dia['dia_nome'] }}: {{ dia['total_minutos'] }} minutos"
+                                ></progress>
+
+                            </div>
+
                         </div>
 
-                        <progress
-                            class="barra-grafico"
-                            value="{{ dia['total_minutos'] }}"
-                            max="{{ maior_tempo if maior_tempo > 0 else 1 }}"
-                            aria-label="{{ dia['dia_nome'] }}:
-                                {{ dia['total_minutos'] }} minutos">
-                        </progress>
-                    </div>
-                {% endfor %}
+                    {% endfor %}
+
+                </div>
             </div>
+
         </section>
 
         <!-- Tempo por matéria -->
-        <section class="secao-grafico">
-            <h2>Tempo por matéria</h2>
-            <p>Veja quais matérias receberam mais tempo de estudo.</p>
+        <section class="secao-grafico" id="materias">
+
+            <div class="titulo-secao-historico">
+                <span class="subtitulo-secao">DISTRIBUIÇÃO DO TEMPO</span>
+
+                <h2>Tempo por matéria</h2>
+
+                <p>
+                    Descubra quais matérias receberam mais dedicação.
+                </p>
+            </div>
 
             {% if materias_estudadas %}
-                {% for item in materias_estudadas %}
-                    <article class="cartao-anotacao">
-                        <h3>{{ item['materia'] }}</h3>
-                        <p>
-                            <strong>Tempo total:</strong>
-                            {{ item['total_minutos'] }} minutos
-                        </p>
-                        <p>
-                            <strong>Sessões registradas:</strong>
-                            {{ item['total_sessoes'] }}
-                        </p>
-                    </article>
-                {% endfor %}
+
+                <div class="lista-materias-historico">
+
+                    {% for item in materias_estudadas %}
+
+                        <article class="cartao-anotacao cartao-materia-historico">
+
+                            <div class="cabecalho-cartao-materia">
+
+                                <span class="icone-materia">📘</span>
+
+                                <div>
+                                    <h3>{{ item['materia'] }}</h3>
+
+                                    <small>
+                                        {{ item['total_sessoes'] }}
+
+                                        {% if item['total_sessoes'] == 1 %}
+                                            sessão registrada
+                                        {% else %}
+                                            sessões registradas
+                                        {% endif %}
+                                    </small>
+                                </div>
+
+                            </div>
+
+                            <p>
+                                <strong>Tempo total:</strong>
+                                {{ item['total_minutos'] }} minutos
+                            </p>
+
+                            <progress
+                                class="progresso-materia"
+                                value="{{ item['total_minutos'] }}"
+                                max="{{ resumo['total_minutos'] if resumo['total_minutos'] > 0 else 1 }}"
+                                aria-label="Tempo acumulado em {{ item['materia'] }}"
+                            ></progress>
+
+                            <small>
+                                {% if resumo['total_minutos'] > 0 %}
+
+                                    {{ (
+                                        item['total_minutos'] * 100
+                                        / resumo['total_minutos']
+                                    ) | round(1) }}%
+                                    do tempo total de estudo
+
+                                {% else %}
+
+                                    Nenhum minuto acumulado
+
+                                {% endif %}
+                            </small>
+
+                        </article>
+
+                    {% endfor %}
+
+                </div>
+
             {% else %}
-                <p>Nenhuma matéria estudada ainda.</p>
+
+                <div class="estado-vazio">
+
+                    <span>📖</span>
+
+                    <h3>Nenhuma matéria registrada</h3>
+
+                    <p>
+                        Quando você registrar sessões de estudo,
+                        o resumo por matéria aparecerá aqui.
+                    </p>
+
+                </div>
+
             {% endif %}
+
         </section>
 
-        <!-- Histórico de sessões -->
-        <section class="secao-grafico">
-            <h2>Todas as sessões</h2>
-            <p>Consulte os registros salvos no banco de dados.</p>
+        <!-- Histórico completo -->
+        <section class="secao-grafico" id="sessoes">
+
+            <div class="titulo-secao-historico">
+
+                <span class="subtitulo-secao">SEU CAMINHO</span>
+
+                <h2>Todas as sessões</h2>
+
+                <p>
+                    Consulte os registros salvos no banco de dados.
+                </p>
+
+                <span class="contador-sessoes">
+                    {{ sessoes|length }}
+
+                    {% if sessoes|length == 1 %}
+                        registro
+                    {% else %}
+                        registros
+                    {% endif %}
+                </span>
+
+            </div>
 
             {% if sessoes %}
-                {% for sessao in sessoes %}
-                    <article class="cartao-anotacao">
-                        <h3>{{ sessao['materia'] }}</h3>
 
-                        <p>
-                            <strong>Duração:</strong>
-                            {{ sessao['duracao_minutos'] }} minutos
-                        </p>
+                <div class="lista-sessoes-historico">
 
-                        <p>
-                            <strong>Data do estudo:</strong>
-                            {{ sessao['data_estudo'] }}
-                        </p>
+                    {% for sessao in sessoes %}
 
-                        <small>
-                            Registro criado em: {{ sessao['criado_em'] }}
-                        </small>
-                    </article>
-                {% endfor %}
+                        <article class="cartao-anotacao cartao-sessao-historico">
+
+                            <div class="cabecalho-cartao-materia">
+
+                                <span class="icone-materia">✓</span>
+
+                                <div>
+                                    <h3>{{ sessao['materia'] }}</h3>
+
+                                    <small>
+                                        Estudo realizado em
+                                        {{ sessao['data_estudo'] }}
+                                    </small>
+                                </div>
+
+                            </div>
+
+                            <div class="detalhes-sessao">
+                                <span>Duração</span>
+
+                                <strong>
+                                    {{ sessao['duracao_minutos'] }} min
+                                </strong>
+                            </div>
+
+                            <div class="informacoes-data-sessao">
+                                <span>Data do estudo</span>
+
+                                <strong>{{ sessao['data_estudo'] }}</strong>
+                            </div>
+
+                            <small class="data-criacao-sessao">
+                                Registro criado em:
+                                {{ sessao['criado_em'] }}
+                            </small>
+
+                        </article>
+
+                    {% endfor %}
+
+                </div>
+
             {% else %}
-                <p>
-                    Nenhuma sessão registrada ainda.
-                    Volte à página inicial e registre seu primeiro estudo!
-                </p>
-                <a href="{{ url_for('inicio') }}">Registrar um estudo</a>
+
+                <div class="estado-vazio">
+
+                    <span>⏱️</span>
+
+                    <h3>Seu histórico começa aqui</h3>
+
+                    <p>
+                        Você ainda não possui sessões registradas.
+                        Inicie um Pomodoro ou registre seu tempo de estudo
+                        manualmente.
+                    </p>
+
+                    <a
+                        class="botao botao-voltar-estudos"
+                        href="{{ url_for('inicio') }}"
+                    >
+                        Ir para os estudos →
+                    </a>
+
+                </div>
+
             {% endif %}
+
         </section>
+
+        <!-- Voltar ao painel -->
+        <a class="link-voltar" href="{{ url_for('inicio') }}">
+            ← Voltar ao painel inicial
+        </a>
+
     </main>
 
-    <footer>
+    <!-- Rodapé -->
+    <footer class="rodape">
         <p>DevStudy — Aprender, praticar e evoluir.</p>
     </footer>
+
 </body>
 </html>

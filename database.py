@@ -2,6 +2,7 @@
 import sqlite3
 from pathlib import Path
 
+
 # Descobre a pasta principal do projeto
 PASTA_PROJETO = Path(__file__).resolve().parent
 
@@ -9,20 +10,25 @@ PASTA_PROJETO = Path(__file__).resolve().parent
 PASTA_DADOS = PASTA_PROJETO / "instance"
 
 # Cria a pasta caso ela ainda não exista
-PASTA_DADOS.mkdir(exist_ok=True)
+PASTA_DADOS.mkdir(parents=True, exist_ok=True)
 
 # Define o caminho completo do banco
 CAMINHO_BANCO = PASTA_DADOS / "devstudy.db"
 
 
 def conectar():
+    """Cria uma conexão com o banco de dados."""
     conexao = sqlite3.connect(CAMINHO_BANCO)
     conexao.row_factory = sqlite3.Row
     return conexao
 
 
 def criar_tabelas():
+    """Cria as tabelas e atualiza a estrutura do banco."""
+
     with conectar() as conexao:
+
+        # Tabela de anotações
         conexao.execute("""
             CREATE TABLE IF NOT EXISTS anotacoes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,7 +39,7 @@ def criar_tabelas():
             )
         """)
 
-        # Verifica quais colunas já existem
+        # Verifica as colunas existentes nas anotações
         colunas = conexao.execute(
             "PRAGMA table_info(anotacoes)"
         ).fetchall()
@@ -56,8 +62,7 @@ def criar_tabelas():
                 ADD COLUMN favorita INTEGER NOT NULL DEFAULT 0
             """)
 
-            
-        # Cria a tabela que guarda a meta diária
+        # Tabela da meta diária
         conexao.execute("""
             CREATE TABLE IF NOT EXISTS meta_diaria (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -65,22 +70,51 @@ def criar_tabelas():
             )
         """)
 
-        # Cria a tabela que registra as sessões de estudo
+        # Tabela das sessões de estudo
         conexao.execute("""
             CREATE TABLE IF NOT EXISTS sessoes_estudo (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 materia TEXT NOT NULL,
                 duracao_minutos INTEGER NOT NULL,
-                data_estudo TEXT NOT NULL DEFAULT (date('now', 'localtime')),
-                criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                data_estudo TEXT NOT NULL
+                    DEFAULT (date('now', 'localtime')),
+                criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                identificador TEXT
             )
         """)
 
-        # Define a meta inicial de 60 minutos, caso ainda não exista
+        # Verifica as colunas existentes nas sessões
+        colunas_sessoes = conexao.execute(
+            "PRAGMA table_info(sessoes_estudo)"
+        ).fetchall()
+
+        nomes_colunas_sessoes = [
+            coluna["name"] for coluna in colunas_sessoes
+        ]
+
+        # Atualiza bancos antigos sem apagar os registros
+        if "identificador" not in nomes_colunas_sessoes:
+            conexao.execute("""
+                ALTER TABLE sessoes_estudo
+                ADD COLUMN identificador TEXT
+            """)
+
+        # Impede a repetição de identificadores não nulos
         conexao.execute("""
-            INSERT OR IGNORE INTO meta_diaria (id, minutos_meta)
+            CREATE UNIQUE INDEX IF NOT EXISTS
+            idx_sessoes_identificador
+            ON sessoes_estudo (identificador)
+        """)
+
+        # Cria a meta inicial de 60 minutos, caso não exista
+        conexao.execute("""
+            INSERT OR IGNORE INTO meta_diaria (
+                id,
+                minutos_meta
+            )
             VALUES (1, 60)
         """)
+
 
 if __name__ == "__main__":
     criar_tabelas()
