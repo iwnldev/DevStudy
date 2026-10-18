@@ -1,0 +1,918 @@
+
+/* ========================================
+   1. CONFIGURAÇÕES GERAIS
+======================================== */
+
+:root {
+    --fundo: #10141c;
+    --painel: #191f2b;
+    --painel-hover: #202938;
+    --borda: #2b3445;
+    --texto: #edf2fa;
+    --texto-secundario: #9aa8bd;
+    --destaque: #69a7ff;
+    --destaque-hover: #8bbaff;
+    --perigo: #7f3038;
+    --raio: 14px;
+    --transicao: 0.2s ease;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    min-height: 100vh;
+    margin: 0;
+    background:
+        radial-gradient(
+            circle at top right,
+            rgba(105, 167, 255, 0.07),
+            transparent 35%
+        ),
+        var(--fundo);
+    color: var(--texto);
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+}
+
+a {
+    transition:
+        color var(--transicao),
+        background var(--transicao),
+        border-color var(--transicao);
+}
+
+::selection {
+    background: var(--destaque);
+    color: var(--fundo);
+}
+
+
+/* ========================================
+   2. CABEÇALHO
+======================================== */
+
+header {
+    padding: 28px max(5%, calc((100% - 1100px) / 2));
+    border-bottom: 1px solid var(--borda);
+    background: rgba(25, 31, 43, 0.94);
+}
+
+header h1 {
+    margin: 0;
+    color: var(--destaque);
+    font-size: 30px;
+    letter-spacing: -0.8px;
+}
+
+header p {
+    margin: 4px 0 0;
+    color: var(--texto-secundario);
+}
+
+
+/* ========================================
+   3. ÁREA PRINCIPAL
+======================================== */
+
+main {
+    width: min(1000px, 90%);
+    margin: 36px auto;
+}
+
+section {
+    margin-bottom: 28px;
+    padding: 26px;
+    background: var(--painel);
+    border: 1px solid var(--borda);
+    border-radius: var(--raio);
+}
+
+h2 {
+    margin-top: 0;
+    margin-bottom: 8px;
+    font-size: 22px;
+    letter-spacing: -0.3px;
+}
+
+h3 {
+    line-height: 1.4;
+}
+
+section > p {
+    color: var(--texto-secundario);
+}
+
+
+/* ========================================
+   4. FORMULÁRIOS E CAMPOS
+======================================== */
+
+form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+label {
+    margin-top: 8px;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+input,
+textarea,
+select {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid var(--borda);
+    border-radius: 8px;
+    background: var(--fundo);
+    color: var(--texto);
+    font: inherit;
+    transition:
+        border-color var(--transicao),
+        box-shadow var(--transicao);
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: #77859a;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+    outline: none;
+    border-color: var(--destaque);
+    box-shadow: 0 0 0 3px rgba(105, 167, 255, 0.13);
+}
+
+textarea {
+    min-height: 130px;
+    resize: vertical;
+}
+
+select {
+    cursor: pointer;
+}
+
+
+/* ========================================
+   5. BOTÕES
+======================================== */
+
+button {
+    margin-top: 12px;
+    padding: 12px 16px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: var(--destaque);
+    color: #10141c;
+    font-weight: bold;
+    font-size: 14px;
+    cursor: pointer;
+    transition:
+        background var(--transicao),
+        transform var(--transicao),
+        filter var(--transicao);
+}
+
+button:hover {
+    background: var(--destaque-hover);
+}
+
+button:active {
+    transform: scale(0.98);
+}
+
+button:focus-visible,
+a:focus-visible {
+    outline: 2px solid var(--destaque);
+    outline-offset: 3px;
+}
+
+
+/* ========================================
+   6. PAINEL DE ESTATÍSTICAS
+======================================== */
+
+ 
+.painel-estatisticas {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    padding: 0;
+    background: transparent;
+    border: none;
+}
+
+.cartao-estatistica {
+    margin: 0;
+    padding: 22px;
+    background: linear-gradient(
+        145deg,
+        var(--painel),
+        #171d28
+    );
+    border: 1px solid var(--borda);
+    border-radius: var(--raio);
+    transition:
+        border-color var(--transicao),
+        transform var(--transicao);
+}
+
+.cartao-estatistica:hover {
+    border-color: #465a78;
+    transform: translateY(-2px);
+}
+
+.cartao-estatistica span {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--texto-secundario);
+    font-size: 13px;
+}
+
+.cartao-estatistica strong {
+    display: block;
+    color: var(--destaque);
+    font-size: 32px;
+    line-height: 1.2;
+}
+
+
+/* ========================================
+   7. PESQUISA E FILTROS
+======================================== */
+
+.form-pesquisa {
+    margin: 20px 0 26px;
+    padding: 20px;
+    background: var(--fundo);
+    border: 1px solid var(--borda);
+    border-radius: 12px;
+}
+
+.form-pesquisa input,
+.form-pesquisa select {
+    background: var(--painel);
+}
+
+.acoes-pesquisa {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: 8px;
+}
+
+.acoes-pesquisa button {
+    margin-top: 0;
+}
+
+.acoes-pesquisa a {
+    color: var(--destaque);
+    font-size: 14px;
+    text-decoration: none;
+}
+
+.acoes-pesquisa a:hover {
+    color: var(--destaque-hover);
+    text-decoration: underline;
+}
+
+
+/* ========================================
+   8. CARTÕES DE ANOTAÇÕES
+======================================== */
+
+article:not(.cartao-estatistica) {
+    margin-top: 16px;
+    padding: 22px;
+    background: var(--fundo);
+    border: 1px solid var(--borda);
+    border-radius: 12px;
+    overflow-wrap: anywhere;
+    transition:
+        border-color var(--transicao),
+        background var(--transicao),
+        transform var(--transicao);
+}
+
+article:not(.cartao-estatistica):hover {
+    border-color: #3b4b64;
+    background: #131925;
+}
+
+article h3 {
+    margin-top: 0;
+    margin-bottom: 12px;
+    color: var(--destaque);
+    font-size: 18px;
+}
+
+article p {
+    white-space: pre-wrap;
+}
+
+article p strong {
+    color: var(--texto);
+}
+
+.conteudo-anotacao {
+    margin: 14px 0;
+    color: #d2dbea;
+    line-height: 1.8;
+}
+
+article small {
+    display: block;
+    margin-top: 12px;
+    color: var(--texto-secundario);
+    font-size: 12px;
+}
+
+
+/* ========================================
+   9. CATEGORIAS DAS ANOTAÇÕES
+======================================== */
+
+.linha-categoria {
+    margin: 0 0 10px;
+}
+
+.etiqueta-categoria {
+    display: inline-block;
+    padding: 4px 10px;
+    border: 1px solid rgba(105, 167, 255, 0.35);
+    border-radius: 20px;
+    background: rgba(105, 167, 255, 0.12);
+    color: var(--destaque);
+    font-size: 12px;
+    font-weight: bold;
+}
+
+
+/* ========================================
+   10. AÇÕES DE CADA ANOTAÇÃO
+======================================== */
+
+.acoes-anotacao {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 18px;
+}
+
+.acoes-anotacao form {
+    display: flex;
+    margin: 0;
+}
+
+.botao-editar,
+.botao-excluir,
+.botao-favorito {
+    display: inline-block;
+    padding: 9px 14px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: bold;
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+        background var(--transicao),
+        border-color var(--transicao),
+        color var(--transicao);
+}
+
+.botao-editar {
+    background: rgba(105, 167, 255, 0.13);
+    border-color: rgba(105, 167, 255, 0.35);
+    color: var(--destaque);
+}
+
+.botao-editar:hover {
+    background: rgba(105, 167, 255, 0.23);
+}
+
+.botao-excluir {
+    margin-top: 0;
+    background: rgba(127, 48, 56, 0.2);
+    border-color: rgba(190, 76, 86, 0.4);
+    color: #ff9da5;
+}
+
+.botao-excluir:hover {
+    background: var(--perigo);
+    color: #ffffff;
+}
+
+.botao-favorito {
+    margin-top: 0;
+    background: rgba(255, 193, 7, 0.10);
+    border-color: rgba(255, 193, 7, 0.35);
+    color: #ffd66b;
+}
+
+.botao-favorito:hover {
+    background: rgba(255, 193, 7, 0.20);
+}
+
+.botao-favorito.favorito-ativo {
+    background: rgba(255, 193, 7, 0.20);
+    border-color: #ffd66b;
+}
+
+
+/* ========================================
+   11. RODAPÉ
+======================================== */
+
+footer {
+    padding: 20px;
+    border-top: 1px solid var(--borda);
+    color: var(--texto-secundario);
+    text-align: center;
+    font-size: 13px;
+}
+
+footer p {
+    margin: 0;
+}
+
+
+/* ========================================
+   12. TELAS MENORES
+======================================== */
+
+@media (max-width: 600px) {
+    header {
+        padding: 22px 5%;
+    }
+
+    header h1 {
+        font-size: 26px;
+    }
+
+    main {
+        width: 92%;
+        margin: 22px auto;
+    }
+
+    section {
+        padding: 18px;
+    }
+
+    .painel-estatisticas {
+        gap: 10px;
+    }
+
+    .cartao-estatistica {
+        padding: 16px;
+    }
+
+    .cartao-estatistica strong {
+        font-size: 27px;
+    }
+
+    .form-pesquisa {
+        padding: 14px;
+    }
+
+    article:not(.cartao-estatistica) {
+        padding: 17px;
+    }
+
+    .acoes-pesquisa {
+        align-items: stretch;
+    }
+
+    .acoes-pesquisa button {
+        width: 100%;
+    }
+}
+
+@media (max-width: 380px) {
+    .painel-estatisticas {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+/* ========================================
+   13. ACESSIBILIDADE
+======================================== */
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+    }
+}
+
+
+/* ==============================
+   META DIÁRIA DE ESTUDOS
+============================== */
+
+.secao-meta {
+    margin: 30px 0;
+    padding: 25px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 16px;
+}
+
+.secao-meta h2 {
+    margin-top: 0;
+    color: #f8fafc;
+}
+
+.secao-meta p {
+    color: #cbd5e1;
+}
+
+.resumo-meta {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 15px;
+    margin: 25px 0;
+}
+
+.resumo-meta div {
+    padding: 18px;
+    background: #0f172a;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.resumo-meta span {
+    color: #94a3b8;
+    font-size: 14px;
+}
+
+.resumo-meta strong {
+    color: #38bdf8;
+    font-size: 22px;
+}
+
+.barra-progresso {
+    width: 100%;
+    height: 14px;
+    overflow: hidden;
+    background: #0f172a;
+    border-radius: 20px;
+    margin-top: 20px;
+}
+
+.progresso-preenchido {
+    width: var(--progresso, 0%);
+    height: 100%;
+    background: #38bdf8;
+    border-radius: 20px;
+    transition: width 0.4s ease;
+}
+
+.texto-progresso {
+    text-align: right;
+    font-size: 14px;
+}
+
+.mensagem-meta {
+    padding: 12px;
+    background: #14532d;
+    color: #dcfce7 !important;
+    border-radius: 8px;
+}
+
+.secao-meta form {
+    margin-top: 25px;
+    padding-top: 20px;
+    border-top: 1px solid #334155;
+}
+
+.secao-meta h3 {
+    color: #f8fafc;
+    margin-bottom: 15px;
+}
+
+.secao-meta label {
+    display: block;
+    margin: 12px 0 6px;
+    color: #cbd5e1;
+}
+
+.secao-meta input {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 12px;
+    border: 1px solid #475569;
+    border-radius: 8px;
+    background: #0f172a;
+    color: #f8fafc;
+}
+
+.secao-meta button {
+    padding: 12px 18px;
+    border: none;
+    border-radius: 8px;
+    background: #38bdf8;
+    color: #0f172a;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.secao-meta button:hover {
+    background: #7dd3fc;
+}
+
+@media (max-width: 600px) {
+    .resumo-meta {
+        grid-template-columns: 1fr;
+    }
+
+    .secao-meta {
+        padding: 18px;
+    }
+}
+
+
+/* Gráfico do histórico de estudos */
+.secao-grafico {
+    margin-top: 30px;
+}
+
+.lista-grafico {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    margin-top: 20px;
+}
+
+.item-grafico {
+    padding: 16px;
+    border-radius: 12px;
+    background-color: #f5f5f5;
+}
+
+.informacoes-grafico {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+
+.barra-grafico {
+    display: block;
+    width: 100%;
+    height: 16px;
+    border: none;
+    border-radius: 10px;
+    overflow: hidden;
+    accent-color: #8b5e3c;
+}
+
+.barra-grafico::-webkit-progress-bar {
+    background-color: #dedede;
+    border-radius: 10px;
+}
+
+.barra-grafico::-webkit-progress-value {
+    background-color: #8b5e3c;
+    border-radius: 10px;
+}
+
+.barra-grafico::-moz-progress-bar {
+    background-color: #8b5e3c;
+    border-radius: 10px;
+}
+
+
+/* Painel de desempenho semanal */
+.secao-grafico {
+    margin-top: 30px;
+    padding: 24px;
+    border: 1px solid #293548;
+    border-radius: 14px;
+    background-color: #191f2b;
+}
+
+.secao-grafico h2 {
+    margin-top: 0;
+    color: #f3f4f6;
+}
+
+.secao-grafico > p {
+    color: #a8b6ca;
+    line-height: 1.6;
+}
+
+.painel-semanal {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    margin: 24px 0;
+}
+
+.indicador-semanal {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 20px;
+    border: 1px solid #293548;
+    border-radius: 12px;
+    background-color: #10151e;
+}
+
+.indicador-semanal span {
+    color: #a8b6ca;
+    font-size: 14px;
+}
+
+.indicador-semanal strong {
+    color: #69a1ff;
+    font-size: 25px;
+}
+
+.indicador-semanal small {
+    color: #a8b6ca;
+    font-size: 13px;
+}
+
+.grafico-semanal {
+    padding: 22px;
+    border: 1px solid #293548;
+    border-radius: 12px;
+    background-color: #10151e;
+}
+
+.grafico-semanal h3 {
+    margin-top: 0;
+    margin-bottom: 24px;
+    color: #f3f4f6;
+}
+
+.linha-grafico {
+    margin-bottom: 20px;
+}
+
+.linha-grafico:last-child {
+    margin-bottom: 0;
+}
+
+.rotulo-grafico {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 9px;
+    color: #dce5f2;
+}
+
+.rotulo-grafico strong {
+    color: #ffffff;
+    font-size: 14px;
+}
+
+.barra-grafico {
+    display: block;
+    width: 100%;
+    height: 15px;
+    border: none;
+    border-radius: 10px;
+    overflow: hidden;
+    accent-color: #699cff;
+}
+
+.barra-grafico::-webkit-progress-bar {
+    background-color: #293548;
+    border-radius: 10px;
+}
+
+.barra-grafico::-webkit-progress-value {
+    background-color: #699cff;
+    border-radius: 10px;
+    transition: width 0.3s ease;
+}
+
+.barra-grafico::-moz-progress-bar {
+    background-color: #699cff;
+    border-radius: 10px;
+}
+
+/* Adaptação para celulares */
+@media (max-width: 700px) {
+    .painel-semanal {
+        grid-template-columns: 1fr;
+    }
+
+    .secao-grafico {
+        padding: 16px;
+    }
+
+    .grafico-semanal {
+        padding: 16px;
+    }
+}
+
+
+/* Cronômetro Pomodoro */
+.pomodoro {
+    margin: 25px 0;
+    padding: 28px;
+    text-align: center;
+    background-color: #191f2b;
+    border: 1px solid #293548;
+    border-radius: 14px;
+}
+
+.pomodoro h2 {
+    margin-top: 0;
+    color: #f3f4f6;
+}
+
+.pomodoro > p {
+    color: #a8b6ca;
+}
+
+.visor-pomodoro {
+    margin: 25px 0;
+    color: #69a1ff;
+    font-size: clamp(48px, 8vw, 76px);
+    font-weight: bold;
+    font-variant-numeric: tabular-nums;
+}
+
+.botoes-pomodoro {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.botoes-pomodoro button {
+    padding: 12px 22px;
+    border: none;
+    border-radius: 8px;
+    background-color: #315fa8;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.botoes-pomodoro button:hover {
+    background-color: #4277c7;
+}
+
+.dica-pomodoro {
+    margin-bottom: 0;
+    font-size: 13px;
+}
+
+
+/* Seleção de matéria do Pomodoro */
+.pomodoro label {
+    display: block;
+    margin: 18px 0 8px;
+    color: #dce5f2;
+    font-weight: 600;
+}
+
+.pomodoro select {
+    width: 100%;
+    max-width: 320px;
+    padding: 12px;
+    border: 1px solid #293548;
+    border-radius: 8px;
+    background-color: #10151e;
+    color: #f3f4f6;
+    font-size: 15px;
+}
+
+.pomodoro select:focus {
+    outline: 2px solid #699cff;
+    outline-offset: 2px;
+}
+
+#status-pomodoro {
+    margin-top: 18px;
+}
+
