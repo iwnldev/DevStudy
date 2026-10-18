@@ -80,11 +80,6 @@ def validar_inteiro(valor, minimo, maximo):
 
     return numero
 
-
-# Garante que as tabelas existam e estejam atualizadas
-criar_tabelas()
-
-
 # ==========================================
 # PÁGINA INICIAL
 # ==========================================
@@ -552,9 +547,21 @@ def historico():
     )
 
 
+
 # ==========================================
 # EXECUTAR A APLICAÇÃO
 # ==========================================
 
 if __name__ == "__main__":
-    app.run(debug=os.environ.get("FLASK_DEBUG") == "1")
+    if not app.config["SECRET_KEY"]:
+        raise RuntimeError(
+            "A variável DEVSTUDY_SECRET_KEY não está configurada. "
+            "Configure a chave antes de iniciar o aplicativo."
+        )
+
+    criar_tabelas()
+
+    app.run(
+        debug=os.environ.get("FLASK_DEBUG") == "1"
+    )
+
