@@ -1,5 +1,8 @@
 
+import uuid
+
 import pytest
+
 from app import app
 import database
 
@@ -30,7 +33,6 @@ def cliente(tmp_path, monkeypatch):
 
 def test_pagina_inicial_responde(cliente):
     resposta = cliente.get("/")
-
     assert resposta.status_code == 200
 
 
@@ -48,9 +50,7 @@ def test_cadastrar_anotacao(cliente):
 
     assert resposta.status_code == 200
 
-    # Confere se a anotação foi realmente salva
     conexao = database.conectar()
-
     try:
         anotacao = conexao.execute("""
             SELECT titulo, materia, conteudo, categoria
@@ -64,7 +64,6 @@ def test_cadastrar_anotacao(cliente):
             "Aprendendo variáveis e tipos de dados."
         )
         assert anotacao["categoria"] == "Programação"
-
     finally:
         conexao.close()
 
@@ -84,7 +83,6 @@ def test_cadastro_rejeita_titulo_vazio(cliente):
     assert resposta.status_code == 200
 
     conexao = database.conectar()
-
     try:
         anotacao = conexao.execute("""
             SELECT id
@@ -93,32 +91,28 @@ def test_cadastro_rejeita_titulo_vazio(cliente):
         """, ("Conteúdo de teste",)).fetchone()
 
         assert anotacao is None
-
     finally:
         conexao.close()
 
 
 def test_editar_anotacao(cliente):
-    # Cria uma anotação inicial no banco de teste
     conexao = database.conectar()
+    try:
+        with conexao:
+            cursor = conexao.execute("""
+                INSERT INTO anotacoes
+                    (titulo, materia, conteudo, categoria)
+                VALUES (?, ?, ?, ?)
+            """, (
+                "Título antigo",
+                "Python",
+                "Conteúdo antigo",
+                "Programação"
+            ))
+            anotacao_id = cursor.lastrowid
+    finally:
+        conexao.close()
 
-    with conexao:
-        cursor = conexao.execute("""
-            INSERT INTO anotacoes
-                (titulo, materia, conteudo, categoria)
-            VALUES (?, ?, ?, ?)
-        """, (
-            "Título antigo",
-            "Python",
-            "Conteúdo antigo",
-            "Programação"
-        ))
-
-        anotacao_id = cursor.lastrowid
-
-    conexao.close()
-
-    # Envia os novos dados para a rota de edição
     resposta = cliente.post(
         f"/editar-anotacao/{anotacao_id}",
         data={
@@ -133,7 +127,6 @@ def test_editar_anotacao(cliente):
     assert resposta.status_code == 200
 
     conexao = database.conectar()
-
     try:
         anotacao = conexao.execute("""
             SELECT titulo, conteudo
@@ -143,32 +136,28 @@ def test_editar_anotacao(cliente):
 
         assert anotacao["titulo"] == "Título atualizado"
         assert anotacao["conteudo"] == "Conteúdo atualizado"
-
     finally:
         conexao.close()
 
 
 def test_excluir_anotacao(cliente):
-    # Cria uma anotação no banco de teste
     conexao = database.conectar()
+    try:
+        with conexao:
+            cursor = conexao.execute("""
+                INSERT INTO anotacoes
+                    (titulo, materia, conteudo, categoria)
+                VALUES (?, ?, ?, ?)
+            """, (
+                "Anotação para excluir",
+                "Python",
+                "Conteúdo temporário",
+                "Programação"
+            ))
+            anotacao_id = cursor.lastrowid
+    finally:
+        conexao.close()
 
-    with conexao:
-        cursor = conexao.execute("""
-            INSERT INTO anotacoes
-                (titulo, materia, conteudo, categoria)
-            VALUES (?, ?, ?, ?)
-        """, (
-            "Anotação para excluir",
-            "Python",
-            "Conteúdo temporário",
-            "Programação"
-        ))
-
-        anotacao_id = cursor.lastrowid
-
-    conexao.close()
-
-    # Solicita a exclusão
     resposta = cliente.post(
         f"/excluir-anotacao/{anotacao_id}",
         follow_redirects=True
@@ -177,7 +166,6 @@ def test_excluir_anotacao(cliente):
     assert resposta.status_code == 200
 
     conexao = database.conectar()
-
     try:
         anotacao = conexao.execute("""
             SELECT id
@@ -186,42 +174,36 @@ def test_excluir_anotacao(cliente):
         """, (anotacao_id,)).fetchone()
 
         assert anotacao is None
-
     finally:
         conexao.close()
 
 
 def test_favoritar_anotacao(cliente):
-    # Cria uma anotação inicialmente não favorita
     conexao = database.conectar()
+    try:
+        with conexao:
+            cursor = conexao.execute("""
+                INSERT INTO anotacoes
+                    (titulo, materia, conteudo, categoria, favorita)
+                VALUES (?, ?, ?, ?, ?)
+            """, (
+                "Anotação favorita",
+                "Python",
+                "Estudando testes",
+                "Programação",
+                0
+            ))
+            anotacao_id = cursor.lastrowid
+    finally:
+        conexao.close()
 
-    with conexao:
-        cursor = conexao.execute("""
-            INSERT INTO anotacoes
-                (titulo, materia, conteudo, categoria, favorita)
-            VALUES (?, ?, ?, ?, ?)
-        """, (
-            "Anotação favorita",
-            "Python",
-            "Estudando testes",
-            "Programação",
-            0
-        ))
-
-        anotacao_id = cursor.lastrowid
-
-    conexao.close()
-
-    # Marca a anotação como favorita
     resposta = cliente.post(
         f"/favoritar-anotacao/{anotacao_id}",
         follow_redirects=True
     )
-
     assert resposta.status_code == 200
 
     conexao = database.conectar()
-
     try:
         anotacao = conexao.execute("""
             SELECT favorita
@@ -230,20 +212,16 @@ def test_favoritar_anotacao(cliente):
         """, (anotacao_id,)).fetchone()
 
         assert anotacao["favorita"] == 1
-
     finally:
         conexao.close()
 
-    # Clica novamente para retirar dos favoritos
     resposta = cliente.post(
         f"/favoritar-anotacao/{anotacao_id}",
         follow_redirects=True
     )
-
     assert resposta.status_code == 200
 
     conexao = database.conectar()
-
     try:
         anotacao = conexao.execute("""
             SELECT favorita
@@ -252,7 +230,6 @@ def test_favoritar_anotacao(cliente):
         """, (anotacao_id,)).fetchone()
 
         assert anotacao["favorita"] == 0
-
     finally:
         conexao.close()
 
@@ -267,7 +244,6 @@ def test_definir_meta_diaria(cliente):
     assert resposta.status_code == 200
 
     conexao = database.conectar()
-
     try:
         meta = conexao.execute("""
             SELECT minutos_meta
@@ -277,7 +253,6 @@ def test_definir_meta_diaria(cliente):
 
         assert meta is not None
         assert meta["minutos_meta"] == 120
-
     finally:
         conexao.close()
 
@@ -298,7 +273,6 @@ def test_registrar_sessao_estudo(cliente):
     assert resposta.status_code == 200
 
     conexao = database.conectar()
-
     try:
         sessao = conexao.execute("""
             SELECT materia, duracao_minutos, identificador
@@ -310,7 +284,6 @@ def test_registrar_sessao_estudo(cliente):
         assert sessao["materia"] == "Python"
         assert sessao["duracao_minutos"] == 25
         assert sessao["identificador"] == identificador
-
     finally:
         conexao.close()
 
@@ -324,13 +297,11 @@ def test_impedir_sessao_duplicada(cliente):
         "identificador": identificador
     }
 
-    # Tenta registrar a mesma sessão duas vezes
     primeira_resposta = cliente.post(
         "/registrar-estudo",
         data=dados,
         follow_redirects=True
     )
-
     segunda_resposta = cliente.post(
         "/registrar-estudo",
         data=dados,
@@ -341,7 +312,6 @@ def test_impedir_sessao_duplicada(cliente):
     assert segunda_resposta.status_code == 200
 
     conexao = database.conectar()
-
     try:
         resultado = conexao.execute("""
             SELECT COUNT(*) AS total
@@ -350,20 +320,17 @@ def test_impedir_sessao_duplicada(cliente):
         """, (identificador,)).fetchone()
 
         assert resultado["total"] == 1
-
     finally:
         conexao.close()
 
 
-@pytest.mark.parametrize(
-    "duracao",
-    ["0", "1441", "abc"]
-)
+@pytest.mark.parametrize("duracao", ["0", "1441", "abc"])
 def test_registrar_estudo_rejeita_duracao_invalida(
     cliente,
     duracao
 ):
-    identificador = "teste-duracao-invalida-" + duracao
+    # Usa um UUID válido para que o teste isole a validação da duração.
+    identificador = str(uuid.uuid4())
 
     resposta = cliente.post(
         "/registrar-estudo",
@@ -378,7 +345,6 @@ def test_registrar_estudo_rejeita_duracao_invalida(
     assert resposta.status_code == 200
 
     conexao = database.conectar()
-
     try:
         sessao = conexao.execute("""
             SELECT id
@@ -387,13 +353,12 @@ def test_registrar_estudo_rejeita_duracao_invalida(
         """, (identificador,)).fetchone()
 
         assert sessao is None
-
     finally:
         conexao.close()
 
 
 def test_registrar_estudo_rejeita_materia_invalida(cliente):
-    identificador = "teste-materia-invalida-001"
+    identificador = str(uuid.uuid4())
 
     resposta = cliente.post(
         "/registrar-estudo",
@@ -408,7 +373,6 @@ def test_registrar_estudo_rejeita_materia_invalida(cliente):
     assert resposta.status_code == 200
 
     conexao = database.conectar()
-
     try:
         sessao = conexao.execute("""
             SELECT id
@@ -417,6 +381,294 @@ def test_registrar_estudo_rejeita_materia_invalida(cliente):
         """, (identificador,)).fetchone()
 
         assert sessao is None
-
     finally:
         conexao.close()
+
+
+def test_historico_sem_sessoes(cliente):
+    resposta = cliente.get("/historico")
+
+    assert resposta.status_code == 200
+    assert b"Python" not in resposta.data
+
+
+def test_historico_com_sessoes_de_estudo(cliente):
+    identificador = str(uuid.uuid4())
+
+    resposta = cliente.post(
+        "/registrar-estudo",
+        data={
+            "materia": "Python",
+            "duracao_minutos": "30",
+            "identificador": identificador
+        },
+        follow_redirects=True
+    )
+
+    assert resposta.status_code == 200
+
+    conexao = database.conectar()
+    try:
+        sessao = conexao.execute("""
+            SELECT materia, duracao_minutos
+            FROM sessoes_estudo
+            WHERE identificador = ?
+        """, (identificador,)).fetchone()
+    finally:
+        conexao.close()
+
+    assert sessao is not None
+    assert sessao["materia"] == "Python"
+    assert sessao["duracao_minutos"] == 30
+
+    resposta = cliente.get("/historico")
+
+    assert resposta.status_code == 200
+    assert b"Python" in resposta.data
+    assert b"30" in resposta.data
+
+
+
+def test_pesquisa_limita_texto_a_200_caracteres(
+    cliente, monkeypatch
+):
+    import app as modulo_app
+
+    pesquisa = "a" * 250
+    valores_renderizacao = {}
+
+    def render_template_falso(nome_template, **contexto):
+        valores_renderizacao.update(contexto)
+        return "Página de teste"
+
+    monkeypatch.setattr(
+        modulo_app,
+        "render_template",
+        render_template_falso
+    )
+
+    resposta = cliente.get(
+        "/",
+        query_string={"pesquisa": pesquisa}
+    )
+
+    assert resposta.status_code == 200
+    assert valores_renderizacao["pesquisa"] == "a" * 200
+
+def test_excluir_anotacao_inexistente(cliente):
+    resposta = cliente.post(
+        "/excluir-anotacao/99999",
+        follow_redirects=True
+    )
+
+    assert resposta.status_code == 200
+
+
+def test_favoritar_anotacao_inexistente(cliente):
+    resposta = cliente.post(
+        "/favoritar-anotacao/99999",
+        follow_redirects=True
+    )
+
+    assert resposta.status_code == 200
+
+
+def test_abrir_pagina_edicao_anotacao(cliente):
+    conexao = database.conectar()
+    try:
+        with conexao:
+            cursor = conexao.execute("""
+                INSERT INTO anotacoes
+                    (titulo, materia, conteudo, categoria)
+                VALUES (?, ?, ?, ?)
+            """, (
+                "Anotação original",
+                "Python",
+                "Conteúdo original",
+                "Programação"
+            ))
+            anotacao_id = cursor.lastrowid
+    finally:
+        conexao.close()
+
+    resposta = cliente.get(f"/editar-anotacao/{anotacao_id}")
+
+    assert resposta.status_code == 200
+    assert "Anotação original".encode() in resposta.data
+
+
+def test_editar_anotacao_rejeita_dados_invalidos(cliente):
+    conexao = database.conectar()
+    try:
+        with conexao:
+            cursor = conexao.execute("""
+                INSERT INTO anotacoes
+                    (titulo, materia, conteudo, categoria)
+                VALUES (?, ?, ?, ?)
+            """, (
+                "Título original",
+                "Python",
+                "Conteúdo original",
+                "Programação"
+            ))
+            anotacao_id = cursor.lastrowid
+    finally:
+        conexao.close()
+
+    resposta = cliente.post(
+        f"/editar-anotacao/{anotacao_id}",
+        data={
+            "titulo": "",
+            "materia": "Python",
+            "conteudo": "Conteúdo alterado",
+            "categoria": "Programação"
+        }
+    )
+
+    assert resposta.status_code == 200
+
+    conexao = database.conectar()
+    try:
+        anotacao = conexao.execute("""
+            SELECT titulo, conteudo
+            FROM anotacoes
+            WHERE id = ?
+        """, (anotacao_id,)).fetchone()
+
+        assert anotacao["titulo"] == "Título original"
+        assert anotacao["conteudo"] == "Conteúdo original"
+    finally:
+        conexao.close()
+
+
+def test_registrar_estudo_rejeita_uuid_invalido(cliente):
+    resposta = cliente.post(
+        "/registrar-estudo",
+        data={
+            "materia": "Python",
+            "duracao_minutos": "25",
+            "identificador": "uuid-invalido"
+        },
+        follow_redirects=True
+    )
+
+    assert resposta.status_code == 200
+
+    conexao = database.conectar()
+    try:
+        total = conexao.execute("""
+            SELECT COUNT(*) FROM sessoes_estudo
+        """).fetchone()[0]
+
+        assert total == 0
+    finally:
+        conexao.close()
+
+
+def test_definir_meta_rejeita_valor_invalido(cliente):
+    resposta = cliente.post(
+        "/definir-meta",
+        data={"minutos_meta": "0"},
+        follow_redirects=True
+    )
+
+    assert resposta.status_code == 200
+
+    conexao = database.conectar()
+    try:
+        meta = conexao.execute("""
+            SELECT minutos_meta
+            FROM meta_diaria
+            WHERE id = 1
+        """).fetchone()
+
+        assert meta["minutos_meta"] == 60
+    finally:
+        conexao.close()
+
+
+def test_filtrar_anotacoes_por_materia(cliente):
+    cliente.post(
+        "/nova-anotacao",
+        data={
+            "titulo": "Estudando Python",
+            "materia": "Python",
+            "conteudo": "Conteúdo de Python",
+            "categoria": "Programação"
+        }
+    )
+
+    cliente.post(
+        "/nova-anotacao",
+        data={
+            "titulo": "Estudando JavaScript",
+            "materia": "JavaScript",
+            "conteudo": "Conteúdo de JavaScript",
+            "categoria": "Programação"
+        }
+    )
+
+    resposta = cliente.get(
+        "/",
+        query_string={"materia": "Python"}
+    )
+
+    assert resposta.status_code == 200
+    assert b"Estudando Python" in resposta.data
+    assert b"Estudando JavaScript" not in resposta.data
+
+
+def test_filtrar_anotacoes_favoritas(cliente):
+    cliente.post(
+        "/nova-anotacao",
+        data={
+            "titulo": "Anotação importante",
+            "materia": "Python",
+            "conteudo": "Conteúdo favorito",
+            "categoria": "Programação"
+        }
+    )
+
+    cliente.post(
+        "/nova-anotacao",
+        data={
+            "titulo": "Anotação comum",
+            "materia": "Python",
+            "conteudo": "Conteúdo comum",
+            "categoria": "Programação"
+        }
+    )
+
+    conexao = database.conectar()
+    try:
+        conexao.execute("""
+            UPDATE anotacoes
+            SET favorita = 1
+            WHERE titulo = ?
+        """, ("Anotação importante",))
+        conexao.commit()
+    finally:
+        conexao.close()
+
+    resposta = cliente.get(
+        "/",
+        query_string={"favoritas": "1"}
+    )
+
+    assert resposta.status_code == 200
+    assert "Anotação importante".encode("utf-8") in resposta.data
+    assert "Anotação comum".encode("utf-8") not in resposta.data
+
+    
+from app import validar_texto, validar_inteiro
+
+
+def test_validar_texto_rejeita_valor_que_nao_e_texto():
+    assert validar_texto(None, 100) is None
+    assert validar_texto(123, 100) is None
+
+
+def test_validar_inteiro_rejeita_valor_que_nao_e_texto():
+    assert validar_inteiro(None, 1, 1440) is None
+    assert validar_inteiro(25, 1, 1440) is None
+
