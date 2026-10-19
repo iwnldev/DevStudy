@@ -8,3 +8,4 @@ instance/
 !.env.example
 .vscode/
 .pytest_cache/
+.coverage

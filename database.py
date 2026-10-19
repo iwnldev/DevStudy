@@ -1,6 +1,7 @@
 
 import sqlite3
 from pathlib import Path
+from contextlib import contextmanager
 
 
 # Descobre a pasta principal do projeto
@@ -23,10 +24,22 @@ def conectar():
     return conexao
 
 
+@contextmanager
+def conexao_aberta():
+    """Gerencia a transação e fecha a conexão ao terminar."""
+    conexao = conectar()
+
+    try:
+        with conexao:
+            yield conexao
+    finally:
+        conexao.close()
+
+
 def criar_tabelas():
     """Cria as tabelas e atualiza a estrutura do banco."""
 
-    with conectar() as conexao:
+    with conexao_aberta() as conexao:
 
         # Tabela de anotações
         conexao.execute("""
