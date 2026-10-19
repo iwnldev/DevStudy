@@ -672,3 +672,22 @@ def test_validar_inteiro_rejeita_valor_que_nao_e_texto():
     assert validar_inteiro(None, 1, 1440) is None
     assert validar_inteiro(25, 1, 1440) is None
 
+
+
+def test_csrf_bloqueia_post_sem_token(cliente):
+    # Ativa a proteção CSRF para este teste
+    app.config["WTF_CSRF_ENABLED"] = True
+
+    try:
+        # Envia uma requisição sem token CSRF
+        resposta = cliente.post(
+            "/nova-anotacao",
+            data={}
+        )
+
+        # O Flask deve rejeitar a requisição
+        assert resposta.status_code == 400
+
+    finally:
+        # Restaura a configuração usada pelos outros testes
+        app.config["WTF_CSRF_ENABLED"] = False
