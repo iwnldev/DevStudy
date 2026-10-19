@@ -30,8 +30,11 @@ def conexao_aberta():
     conexao = conectar()
 
     try:
-        with conexao:
-            yield conexao
+        yield conexao
+        conexao.commit()
+    except Exception:
+        conexao.rollback()
+        raise
     finally:
         conexao.close()
 
