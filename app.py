@@ -3,6 +3,9 @@ from flask import Flask, render_template, request, redirect, url_for
 from flask_wtf.csrf import CSRFProtect
 import os
 import uuid
+import calendar
+from datetime import date
+import unicodedata
 
 from database import conexao_aberta, criar_tabelas
 
@@ -69,6 +72,277 @@ def validar_inteiro(valor, minimo, maximo):
         return None
 
     return numero
+
+
+def buscar_materias(conexao):
+    """Retorna as matérias cadastradas, em ordem alfabética."""
+    return conexao.execute("""
+        SELECT id, nome, descricao
+        FROM materias
+        ORDER BY nome COLLATE NOCASE
+    """).fetchall()
+
+
+def normalizar_nome_materia(nome):
+    """Normaliza um nome para comparação sem diferenças de caixa."""
+    return unicodedata.normalize("NFC", nome).casefold()
+
+
+# ==========================================
+# MATÉRIAS DE ESTUDO
+# ==========================================
+
+@app.route("/materias", methods=["GET", "POST"])
+def gerenciar_materias():
+    erro = None
+
+    if request.method == "POST":
+        nome = validar_texto(
+            request.form.get("nome", ""),
+            60
+        )
+
+        descricao = request.form.get("descricao", "").strip()
+
+        if nome is None:
+            erro = "Informe um nome de matéria com até 60 caracteres."
+
+        elif len(descricao) > 300:
+            erro = "A descrição deve ter no máximo 300 caracteres."
+
+        else:
+            with conexao_aberta() as conexao:
+                materias_existentes = conexao.execute("""
+                    SELECT id, nome
+                    FROM materias
+                """).fetchall()
+
+                nome_normalizado = normalizar_nome_materia(nome)
+
+                materia_existente = any(
+                    normalizar_nome_materia(materia["nome"])
+                    == nome_normalizado
+                    for materia in materias_existentes
+                )
+
+                if materia_existente:
+                    erro = "Já existe uma matéria com esse nome."
+                else:
+                    conexao.execute("""
+                        INSERT INTO materias (nome, descricao)
+                        VALUES (?, ?)
+                    """, (nome, descricao))
+
+                    return redirect(url_for("gerenciar_materias"))
+
+    with conexao_aberta() as conexao:
+        materias = buscar_materias(conexao)
+
+    return render_template(
+        "materias.html",
+        materias=materias,
+        erro=erro
+    )
+
+
+# ==========================================
+# CURSOS E MÓDULOS
+# ==========================================
+
+
+@app.route("/cursos")
+def listar_cursos():
+    """Lista os cursos cadastrados e suas matérias."""
+    with conexao_aberta() as conexao:
+        cursos = conexao.execute("""
+            SELECT
+                cursos.id,
+                cursos.titulo,
+                cursos.descricao,
+                cursos.criado_em,
+                materias.nome AS materia_nome,
+                COUNT(modulos.id) AS total_modulos
+            FROM cursos
+            LEFT JOIN materias
+                ON materias.id = cursos.materia_id
+            LEFT JOIN modulos
+                ON modulos.curso_id = cursos.id
+            GROUP BY cursos.id
+            ORDER BY cursos.id DESC
+        """).fetchall()
+
+        materias = buscar_materias(conexao)
+
+    return render_template(
+        "cursos.html",
+        cursos=cursos,
+        materias=materias,
+        erro=None
+    )
+
+
+
+@app.route("/novo-curso", methods=["POST"])
+def novo_curso():
+    """Cadastra um curso e associa uma matéria opcional."""
+    titulo = validar_texto(
+        request.form.get("titulo", ""),
+        120
+    )
+
+    descricao = request.form.get("descricao", "").strip()
+    materia_id_texto = request.form.get("materia_id", "").strip()
+
+    if titulo is None:
+        return redirect(url_for("listar_cursos"))
+
+    if len(descricao) > 1000:
+        return redirect(url_for("listar_cursos"))
+
+    materia_id = None
+
+    if materia_id_texto:
+        materia_id = validar_inteiro(
+            materia_id_texto,
+            1,
+            2147483647
+        )
+
+        if materia_id is None:
+            return redirect(url_for("listar_cursos"))
+
+    with conexao_aberta() as conexao:
+        if materia_id is not None:
+            materia = conexao.execute("""
+                SELECT id
+                FROM materias
+                WHERE id = ?
+            """, (materia_id,)).fetchone()
+
+            if materia is None:
+                return redirect(url_for("listar_cursos"))
+
+        conexao.execute("""
+            INSERT INTO cursos (titulo, descricao, materia_id)
+            VALUES (?, ?, ?)
+        """, (titulo, descricao, materia_id))
+
+    return redirect(url_for("listar_cursos"))
+
+
+@app.route("/curso/<int:curso_id>")
+def visualizar_curso(curso_id):
+    """Exibe os detalhes de um curso e seus módulos."""
+    with conexao_aberta() as conexao:
+        curso = conexao.execute("""
+            SELECT
+                cursos.id,
+                cursos.titulo,
+                cursos.descricao,
+                cursos.criado_em,
+                materias.nome AS materia_nome
+            FROM cursos
+            LEFT JOIN materias
+                ON materias.id = cursos.materia_id
+            WHERE cursos.id = ?
+        """, (curso_id,)).fetchone()
+
+        if curso is None:
+            return "Curso não encontrado.", 404
+
+        modulos = conexao.execute("""
+            SELECT
+                id,
+                curso_id,
+                titulo,
+                descricao,
+                ordem,
+                criado_em
+            FROM modulos
+            WHERE curso_id = ?
+            ORDER BY ordem, id
+        """, (curso_id,)).fetchall()
+
+        materias = buscar_materias(conexao)
+
+    return render_template(
+        "curso.html",
+        curso=curso,
+        modulos=modulos,
+        materias=materias,
+        erro=None
+    )
+
+
+@app.route("/curso/<int:curso_id>/novo-modulo", methods=["POST"])
+def novo_modulo(curso_id):
+    """Adiciona um módulo a um curso existente."""
+    titulo = validar_texto(
+        request.form.get("titulo", ""),
+        120
+    )
+
+    descricao = request.form.get("descricao", "").strip()
+
+    ordem_texto = request.form.get("ordem", "1").strip()
+    ordem = validar_inteiro(ordem_texto, 1, 10000)
+
+    if titulo is None or len(descricao) > 1000 or ordem is None:
+        return redirect(url_for(
+            "visualizar_curso",
+            curso_id=curso_id
+        ))
+
+    with conexao_aberta() as conexao:
+        curso = conexao.execute("""
+            SELECT id
+            FROM cursos
+            WHERE id = ?
+        """, (curso_id,)).fetchone()
+
+        if curso is None:
+            return "Curso não encontrado.", 404
+
+        conexao.execute("""
+            INSERT INTO modulos (
+                curso_id,
+                titulo,
+                descricao,
+                ordem
+            )
+            VALUES (?, ?, ?, ?)
+        """, (curso_id, titulo, descricao, ordem))
+
+    return redirect(url_for(
+        "visualizar_curso",
+        curso_id=curso_id
+    ))
+
+
+@app.route("/modulo/<int:modulo_id>/excluir", methods=["POST"])
+def excluir_modulo(modulo_id):
+    """Exclui um módulo específico."""
+    with conexao_aberta() as conexao:
+        modulo = conexao.execute("""
+            SELECT curso_id
+            FROM modulos
+            WHERE id = ?
+        """, (modulo_id,)).fetchone()
+
+        if modulo is None:
+            return "Módulo não encontrado.", 404
+
+        curso_id = modulo["curso_id"]
+
+        conexao.execute("""
+            DELETE FROM modulos
+            WHERE id = ?
+        """, (modulo_id,))
+
+    return redirect(url_for(
+        "visualizar_curso",
+        curso_id=curso_id
+    ))
 
 
 # ==========================================
@@ -248,6 +522,78 @@ def registrar_estudo():
 
 
 # ==========================================
+# EDITAR SESSÃO DE ESTUDO
+# ==========================================
+
+@app.route("/editar-sessao/<int:id>", methods=["GET", "POST"])
+def editar_sessao(id):
+    with conexao_aberta() as conexao:
+        sessao = conexao.execute("""
+            SELECT id, materia, duracao_minutos, data_estudo
+            FROM sessoes_estudo
+            WHERE id = ?
+        """, (id,)).fetchone()
+
+        if sessao is None:
+            return "Sessão de estudo não encontrada.", 404
+
+        if request.method == "POST":
+            materia = validar_texto(
+                request.form.get("materia", ""), 60
+            )
+
+            duracao = validar_inteiro(
+                request.form.get("duracao_minutos", ""),
+                1,
+                1440
+            )
+
+            if materia not in MATERIAS_ESTUDO or duracao is None:
+                return render_template(
+                    "editar_sessao.html",
+                    sessao=sessao,
+                    materias=MATERIAS_ESTUDO,
+                    erro="Selecione uma matéria válida e informe uma duração entre 1 e 1440 minutos."
+                ), 400
+
+            conexao.execute("""
+                UPDATE sessoes_estudo
+                SET materia = ?,
+                    duracao_minutos = ?
+                WHERE id = ?
+            """, (materia, duracao, id))
+
+            return redirect(url_for("historico") + "#sessoes")
+
+    return render_template(
+        "editar_sessao.html",
+        sessao=sessao,
+        materias=MATERIAS_ESTUDO,
+        erro=None
+    )
+
+
+@app.route("/excluir-sessao/<int:id>", methods=["POST"])
+def excluir_sessao(id):
+    with conexao_aberta() as conexao:
+        sessao = conexao.execute("""
+            SELECT id
+            FROM sessoes_estudo
+            WHERE id = ?
+        """, (id,)).fetchone()
+
+        if sessao is None:
+            return "Sessão de estudo não encontrada.", 404
+
+        conexao.execute("""
+            DELETE FROM sessoes_estudo
+            WHERE id = ?
+        """, (id,))
+
+    return redirect(url_for("historico") + "#sessoes")
+
+
+# ==========================================
 # DEFINIR META DIÁRIA
 # ==========================================
 
@@ -398,17 +744,13 @@ def historico():
 
         estudos_semana = conexao.execute("""
             WITH RECURSIVE semana(data) AS (
-                SELECT date(
-                    'now', 'localtime', 'weekday 0', '-6 days'
-                )
+                SELECT date('now', 'localtime', '-6 days')
 
                 UNION ALL
 
                 SELECT date(data, '+1 day')
                 FROM semana
-                WHERE data < date(
-                    'now', 'localtime', 'weekday 0'
-                )
+                WHERE data < date('now', 'localtime')
             )
             SELECT
                 semana.data AS data_estudo,
@@ -458,6 +800,151 @@ def historico():
         media_diaria=media_diaria,
         maior_tempo=maior_tempo,
         melhor_dia=melhor_dia
+    )
+
+
+# ==========================================
+# CALENDÁRIO DE ESTUDOS
+# ==========================================
+
+@app.route("/calendario")
+def calendario():
+    hoje_data = date.today()
+
+    try:
+        ano = int(request.args.get("ano", hoje_data.year))
+        mes = int(request.args.get("mes", hoje_data.month))
+
+        if not 2000 <= ano <= 2100 or not 1 <= mes <= 12:
+            raise ValueError
+
+    except (ValueError, TypeError):
+        ano = hoje_data.year
+        mes = hoje_data.month
+
+    calendario_mes = calendar.Calendar(firstweekday=0)
+    semanas = calendario_mes.monthdayscalendar(ano, mes)
+
+    nomes_dias = [
+        "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"
+    ]
+
+    nome_mes = [
+        "Janeiro", "Fevereiro", "Março", "Abril",
+        "Maio", "Junho", "Julho", "Agosto",
+        "Setembro", "Outubro", "Novembro", "Dezembro"
+    ][mes - 1]
+
+    mes_anterior_numero = mes - 1
+    ano_anterior = ano
+
+    if mes_anterior_numero == 0:
+        mes_anterior_numero = 12
+        ano_anterior -= 1
+
+    proximo_mes_numero = mes + 1
+    ano_proximo = ano
+
+    if proximo_mes_numero == 13:
+        proximo_mes_numero = 1
+        ano_proximo += 1
+
+    data_selecionada = None
+    valor_data = request.args.get("data", "")
+
+    if valor_data:
+        try:
+            data_temporaria = date.fromisoformat(valor_data)
+
+            if (
+                data_temporaria.year == ano
+                and data_temporaria.month == mes
+            ):
+                data_selecionada = data_temporaria
+
+        except ValueError:
+            data_selecionada = None
+
+    with conexao_aberta() as conexao:
+        registros = conexao.execute("""
+            SELECT
+                data_estudo,
+                SUM(duracao_minutos) AS minutos,
+                COUNT(*) AS sessoes
+            FROM sessoes_estudo
+            WHERE strftime('%Y-%m', data_estudo) = ?
+            GROUP BY data_estudo
+            ORDER BY data_estudo
+        """, (f"{ano:04d}-{mes:02d}",)).fetchall()
+
+        sessoes_dia = []
+
+        if data_selecionada:
+            sessoes_dia = conexao.execute("""
+                SELECT
+                    id,
+                    materia,
+                    duracao_minutos,
+                    criado_em
+                FROM sessoes_estudo
+                WHERE data_estudo = ?
+                ORDER BY criado_em DESC, id DESC
+            """, (data_selecionada.isoformat(),)).fetchall()
+
+    registros_dias = {
+        registro["data_estudo"]: {
+            "minutos": registro["minutos"],
+            "sessoes": registro["sessoes"]
+        }
+        for registro in registros
+    }
+
+    total_mes = sum(
+        registro["minutos"] for registro in registros
+    )
+
+    dias_estudados = len(registros)
+
+    total_sessoes_mes = sum(
+        registro["sessoes"] for registro in registros
+    )
+
+    lista_dias = []
+
+    for registro in registros:
+        data_registro = date.fromisoformat(
+            registro["data_estudo"]
+        )
+
+        lista_dias.append({
+            "data_formatada": data_registro.strftime("%d/%m/%Y"),
+            "minutos": registro["minutos"],
+            "sessoes": registro["sessoes"]
+        })
+
+    return render_template(
+        "calendario.html",
+        ano=ano,
+        mes=mes,
+        nome_mes=nome_mes,
+        semanas=semanas,
+        nomes_dias=nomes_dias,
+        hoje=hoje_data.isoformat(),
+        registros_dias=registros_dias,
+        total_mes=total_mes,
+        dias_estudados=dias_estudados,
+        total_sessoes_mes=total_sessoes_mes,
+        lista_dias=lista_dias,
+        data_selecionada=data_selecionada,
+        sessoes_dia=sessoes_dia,
+        mes_anterior={
+            "ano": ano_anterior,
+            "mes": mes_anterior_numero
+        },
+        proximo_mes={
+            "ano": ano_proximo,
+            "mes": proximo_mes_numero
+        }
     )
 
 
