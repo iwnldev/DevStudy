@@ -1,0 +1,408 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Calendário de Estudos | DevStudy</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='style.css') }}"
+    >
+</head>
+
+<body class="pagina-calendario">
+
+    <!-- Cabeçalho principal -->
+    <header class="cabecalho-principal">
+        <div class="cabecalho-conteudo">
+
+            <a href="{{ url_for('inicio') }}" class="marca-devstudy">
+                <span class="marca-icone">D</span>
+                <span>DevStudy</span>
+            </a>
+
+            <p>Visualize sua jornada de estudos.</p>
+
+            <nav
+                class="navegacao-principal"
+                aria-label="Navegação principal"
+            >
+                <a href="{{ url_for('inicio') }}">Início</a>
+
+                <a href="{{ url_for('historico') }}">Histórico</a>
+
+                <a
+                    href="{{ url_for('calendario') }}"
+                    aria-current="page"
+                >
+                    Calendário
+                </a>
+            </nav>
+
+        </div>
+    </header>
+
+    <!-- Conteúdo principal -->
+    <main class="conteudo-calendario">
+
+        <!-- Detalhes do dia selecionado -->
+        {% if data_selecionada %}
+
+            <section class="secao-grafico detalhes-dia">
+
+                <div class="titulo-secao-historico">
+                    <span class="subtitulo-secao">DETALHAMENTO</span>
+
+                    <h2>
+                        Estudos de
+                        {{ data_selecionada.strftime("%d/%m/%Y") }}
+                    </h2>
+
+                    <p>
+                        Confira as sessões registradas nesta data.
+                    </p>
+                </div>
+
+                {% if sessoes_dia %}
+
+                    <div class="lista-dias-estudo">
+
+                        {% for sessao in sessoes_dia %}
+
+                            <article class="item-dia-estudo">
+
+                                <div>
+                                    <strong>
+                                        {{ sessao["materia"] }}
+                                    </strong>
+
+                                    <small>
+                                        Registro: {{ sessao["criado_em"] }}
+                                    </small>
+                                </div>
+
+                                <span>
+                                    {{ sessao["duracao_minutos"] }} min
+                                </span>
+
+                            </article>
+
+                        {% endfor %}
+
+                    </div>
+
+                {% else %}
+
+                    <div class="estado-vazio">
+                        <h3>Nenhuma sessão encontrada</h3>
+
+                        <p>
+                            Não há sessões registradas nesta data.
+                        </p>
+                    </div>
+
+                {% endif %}
+
+                <p>
+                    <a
+                        href="{{ url_for(
+                            'calendario',
+                            ano=ano,
+                            mes=mes
+                        ) }}"
+                    >
+                        Voltar ao calendário
+                    </a>
+                </p>
+
+            </section>
+
+        {% endif %}
+
+        <!-- Calendário mensal -->
+        <section class="secao-grafico">
+
+            <div class="titulo-secao-historico">
+                <span class="subtitulo-secao">ACOMPANHAMENTO</span>
+
+                <h1>Calendário de estudos</h1>
+
+                <p>
+                    Consulte os dias em que você estudou e acompanhe
+                    seu progresso ao longo do tempo.
+                </p>
+            </div>
+
+            <!-- Resumo mensal -->
+            <div class="resumo-calendario">
+
+                <article class="indicador-semanal">
+                    <span>Tempo no mês</span>
+
+                    <strong>
+                        {{ total_mes // 60 }}h
+                        {{ total_mes % 60 }}min
+                    </strong>
+
+                    <small>
+                        {{ total_mes }} minutos acumulados
+                    </small>
+                </article>
+
+                <article class="indicador-semanal">
+                    <span>Dias estudados</span>
+
+                    <strong>{{ dias_estudados }}</strong>
+
+                    <small>
+                        Dia(s) com registros neste mês
+                    </small>
+                </article>
+
+                <article class="indicador-semanal">
+                    <span>Sessões registradas</span>
+
+                    <strong>{{ total_sessoes_mes }}</strong>
+
+                    <small>
+                        Registros no mês selecionado
+                    </small>
+                </article>
+
+            </div>
+
+            <!-- Grade do calendário -->
+            <div class="cartao-calendario">
+
+                <!-- Navegação entre meses -->
+                <div class="navegacao-mes">
+
+                    <a
+                        class="botao-mes"
+                        href="{{ url_for(
+                            'calendario',
+                            ano=mes_anterior.ano,
+                            mes=mes_anterior.mes
+                        ) }}"
+                        aria-label="Ir para o mês anterior"
+                    >
+                        &#8592; Anterior
+                    </a>
+
+                    <div class="titulo-mes">
+
+                        <h2>{{ nome_mes }} de {{ ano }}</h2>
+
+                        <a
+                            href="{{ url_for('calendario') }}"
+                            class="link-hoje"
+                        >
+                            Voltar ao mês atual
+                        </a>
+
+                    </div>
+
+                    <a
+                        class="botao-mes"
+                        href="{{ url_for(
+                            'calendario',
+                            ano=proximo_mes.ano,
+                            mes=proximo_mes.mes
+                        ) }}"
+                        aria-label="Ir para o próximo mês"
+                    >
+                        Próximo &#8594;
+                    </a>
+
+                </div>
+
+                <!-- Dias da semana e dias do mês -->
+                <div class="grade-calendario">
+
+                    {% for nome_dia in nomes_dias %}
+
+                        <div class="cabecalho-dia">
+                            {{ nome_dia }}
+                        </div>
+
+                    {% endfor %}
+
+                    {% for semana in semanas %}
+
+                        {% for numero_dia in semana %}
+
+                            {% if numero_dia == 0 %}
+
+                                <div class="celula-dia dia-vazio"></div>
+
+                            {% else %}
+
+                                {% set data_chave = "%04d-%02d-%02d"|format(
+                                    ano,
+                                    mes,
+                                    numero_dia
+                                ) %}
+
+                                {% set registro = registros_dias.get(data_chave) %}
+
+                                {% set eh_hoje = data_chave == hoje %}
+
+                                {% set eh_selecionado =
+                                    data_selecionada
+                                    and data_chave == data_selecionada.isoformat()
+                                %}
+
+                                <div class="celula-dia
+                                    {% if registro %}dia-com-estudo{% endif %}
+                                    {% if eh_hoje %}dia-atual{% endif %}
+                                    {% if eh_selecionado %}dia-selecionado{% endif %}"
+                                    {% if registro %}
+                                        title="{{ registro.minutos }} minutos estudados"
+                                    {% endif %}
+                                >
+
+                                    {% if registro %}
+
+                                        <a
+                                            class="link-dia-estudo"
+                                            href="{{ url_for(
+                                                'calendario',
+                                                ano=ano,
+                                                mes=mes,
+                                                data=data_chave
+                                            ) }}"
+                                            aria-label="Ver estudos do dia {{ numero_dia }}"
+                                            aria-current="{% if eh_selecionado %}date{% endif %}"
+                                        >
+
+                                            <span class="numero-dia">
+                                                {{ numero_dia }}
+                                            </span>
+
+                                            <span class="marcador-estudo">
+                                                {{ registro.minutos }} min
+                                            </span>
+
+                                            <span
+                                                class="ponto-estudo"
+                                                aria-hidden="true"
+                                            ></span>
+
+                                        </a>
+
+                                    {% else %}
+
+                                        <span class="numero-dia">
+                                            {{ numero_dia }}
+                                        </span>
+
+                                    {% endif %}
+
+                                </div>
+
+                            {% endif %}
+
+                        {% endfor %}
+
+                    {% endfor %}
+
+                </div>
+
+                <!-- Legenda -->
+                <div class="legenda-calendario">
+
+                    <span
+                        class="ponto-legenda"
+                        aria-hidden="true"
+                    ></span>
+
+                    <span>Dia com estudo registrado</span>
+
+                    <span
+                        class="borda-legenda"
+                        aria-hidden="true"
+                    ></span>
+
+                    <span>Hoje</span>
+
+                </div>
+
+            </div>
+
+        </section>
+
+        <!-- Lista de dias estudados no mês -->
+        <section class="secao-grafico">
+
+            <div class="titulo-secao-historico">
+                <span class="subtitulo-secao">DETALHAMENTO</span>
+
+                <h2>Estudos do mês</h2>
+
+                <p>
+                    Veja as datas em que você registrou sessões de estudo.
+                </p>
+            </div>
+
+            {% if lista_dias %}
+
+                <div class="lista-dias-estudo">
+
+                    {% for dia in lista_dias %}
+
+                        <article class="item-dia-estudo">
+
+                            <div>
+                                <strong>
+                                    {{ dia.data_formatada }}
+                                </strong>
+
+                                <small>
+                                    {{ dia.sessoes }}
+
+                                    {% if dia.sessoes == 1 %}
+                                        sessão
+                                    {% else %}
+                                        sessões
+                                    {% endif %}
+                                </small>
+                            </div>
+
+                            <span>
+                                {{ dia.minutos }} min
+                            </span>
+
+                        </article>
+
+                    {% endfor %}
+
+                </div>
+
+            {% else %}
+
+                <div class="estado-vazio">
+
+                    <h3>Nenhum estudo registrado neste mês</h3>
+
+                    <p>
+                        Quando você registrar sessões, elas aparecerão
+                        aqui e no calendário.
+                    </p>
+
+                    <a href="{{ url_for('inicio') }}">
+                        Registrar estudo
+                    </a>
+
+                </div>
+
+            {% endif %}
+
+        </section>
+
+    </main>
+
+</body>
+</html>
