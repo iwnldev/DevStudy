@@ -274,7 +274,7 @@
                 <h2>Todas as sessões</h2>
 
                 <p>
-                    Consulte os registros salvos no banco de dados.
+                    Consulte e gerencie os registros salvos no banco de dados.
                 </p>
 
                 <span class="contador-sessoes">
@@ -330,6 +330,39 @@
                                 Registro criado em:
                                 {{ sessao['criado_em'] }}
                             </small>
+
+                            <!-- Ações da sessão -->
+                            <div class="acoes-sessao">
+
+                                <a
+                                    class="botao botao-editar-sessao"
+                                    href="{{ url_for('editar_sessao', id=sessao['id']) }}"
+                                >
+                                    ✏️ Editar
+                                </a>
+
+                                <form
+                                    action="{{ url_for('excluir_sessao', id=sessao['id']) }}"
+                                    method="POST"
+                                    onsubmit="return confirm('Tem certeza de que deseja excluir esta sessão de estudo? Esta ação não poderá ser desfeita.');"
+                                >
+
+                                    <input
+                                        type="hidden"
+                                        name="csrf_token"
+                                        value="{{ csrf_token() }}"
+                                    >
+
+                                    <button
+                                        type="submit"
+                                        class="botao botao-excluir-sessao"
+                                    >
+                                        🗑️ Excluir
+                                    </button>
+
+                                </form>
+
+                            </div>
 
                         </article>
 
