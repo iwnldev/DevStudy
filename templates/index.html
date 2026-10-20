@@ -16,27 +16,73 @@
 <body>
 
     <!-- Cabeçalho -->
-    <header class="cabecalho-principal">
-        <div class="cabecalho-conteudo">
+    
+<!-- Estrutura do dashboard -->
+<div class="estrutura-dashboard">
 
-            <a href="{{ url_for('inicio') }}" class="marca-devstudy">
-                <span class="marca-icone">D</span>
-                <span>DevStudy</span>
+    <aside class="barra-lateral">
+        <a href="{{ url_for('inicio') }}" class="marca-devstudy">
+            <span class="marca-icone">D</span>
+            <span>DevStudy</span>
+        </a>
+
+        <p class="rotulo-navegacao">ESPAÇO DE ESTUDOS</p>
+
+        <nav class="navegacao-principal" aria-label="Navegação principal">
+            <a href="#painel">
+                <span aria-hidden="true">▦</span>
+                Visão geral
             </a>
 
-            <p>Sua biblioteca pessoal de conhecimento.</p>
+            <a href="#pomodoro">
+                <span aria-hidden="true">◷</span>
+                Pomodoro
+            </a>
 
-            <nav class="navegacao-principal" aria-label="Navegação principal">
-                <a href="#painel">Visão geral</a>
-                <a href="#pomodoro">Pomodoro</a>
-                <a href="#meta">Meta diária</a>
-                <a href="#nova-anotacao">Nova anotação</a>
-                <a href="#biblioteca">Biblioteca</a>
-                <a href="{{ url_for('historico') }}">Histórico de estudos ↗</a>
-            </nav>
+            <a href="#meta">
+                <span aria-hidden="true">◎</span>
+                Meta diária
+            </a>
 
+            <a href="#nova-anotacao">
+                <span aria-hidden="true">＋</span>
+                Nova anotação
+            </a>
+
+            <a href="#biblioteca">
+                <span aria-hidden="true">▤</span>
+                Biblioteca
+            </a>
+
+            <a href="{{ url_for('historico') }}">
+                <span aria-hidden="true">↗</span>
+                Histórico de estudos
+            </a>
+
+            <a href="{{ url_for('calendario') }}">
+                <span aria-hidden="true">📅</span>
+                Calendário
+            </a>
+        </nav>
+
+        <div class="lateral-rodape">
+            <span class="indicador-status" aria-hidden="true"></span>
+            <span>Seu espaço de evolução</span>
         </div>
-    </header>
+    </aside>
+
+    <div class="conteudo-dashboard">
+        <header class="topo-dashboard">
+            <div>
+                <p class="sobretitulo-dashboard">PAINEL DE CONTROLE</p>
+                <h1>Seu espaço de estudos</h1>
+                <p>Organize seus conhecimentos. Evolua todos os dias.</p>
+            </div>
+
+            <a class="atalho-nova-anotacao" href="#nova-anotacao">
+                + Nova anotação
+            </a>
+        </header>
 
     <main>
 
@@ -568,12 +614,15 @@
 
         </section>
 
-    </main>
+        </main>
 
     <!-- Rodapé -->
     <footer class="rodape">
         <p>DevStudy — Aprender, praticar e evoluir.</p>
     </footer>
+
+    </div>
+</div>
 
     <!-- JavaScript do Pomodoro -->
     <script src="{{ url_for('static', filename='pomodoro.js') }}" defer></script>
