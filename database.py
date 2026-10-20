@@ -4,125 +4,229 @@ from pathlib import Path
 from contextlib import contextmanager
 
 
-# Descobre a pasta principal do projeto
+# ==========================================
+# CONFIGURAÇÃO DO BANCO DE DADOS
+# ==========================================
+
 PASTA_PROJETO = Path(__file__).resolve().parent
 
-# Define onde o banco de dados será salvo
 PASTA_DADOS = PASTA_PROJETO / "instance"
-
-# Cria a pasta caso ela ainda não exista
 PASTA_DADOS.mkdir(parents=True, exist_ok=True)
 
-# Define o caminho completo do banco
 CAMINHO_BANCO = PASTA_DADOS / "devstudy.db"
 
 
+# ==========================================
+# MATÉRIAS INICIAIS
+# ==========================================
+
+MATERIAS_INICIAIS = [
+    "Python",
+    "JavaScript",
+    "Banco de dados",
+    "Redes de computadores",
+    "Faculdade - ADS",
+    "Geral",
+]
+
+
+# ==========================================
+# CONEXÃO COM O BANCO
+# ==========================================
+
 def conectar():
-    """Cria uma conexão com o banco de dados."""
+    """Abre uma conexão com o banco SQLite."""
     conexao = sqlite3.connect(CAMINHO_BANCO)
+
+    # Permite acessar as colunas pelo nome.
     conexao.row_factory = sqlite3.Row
+
+    # Habilita as chaves estrangeiras nesta conexão.
+    conexao.execute("PRAGMA foreign_keys = ON")
+
     return conexao
 
 
+# ==========================================
+# CONTEXTO PARA GERENCIAR TRANSAÇÕES
+# ==========================================
+
 @contextmanager
 def conexao_aberta():
-    """Gerencia a transação e fecha a conexão ao terminar."""
+    """
+    Abre uma conexão e gerencia automaticamente
+    commit, rollback e fechamento.
+    """
     conexao = conectar()
 
     try:
         yield conexao
         conexao.commit()
+
     except Exception:
         conexao.rollback()
         raise
+
     finally:
         conexao.close()
 
 
+# ==========================================
+# CRIAÇÃO E ATUALIZAÇÃO DAS TABELAS
+# ==========================================
+
 def criar_tabelas():
-    """Cria as tabelas e atualiza a estrutura do banco."""
+    """Cria as tabelas necessárias sem apagar os dados existentes."""
 
     with conexao_aberta() as conexao:
 
-        # Tabela de anotações
+        # --------------------------------------
+        # ANOTAÇÕES
+        # --------------------------------------
+
         conexao.execute("""
             CREATE TABLE IF NOT EXISTS anotacoes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 titulo TEXT NOT NULL,
-                conteudo TEXT NOT NULL,
                 materia TEXT NOT NULL,
+                conteudo TEXT NOT NULL,
                 criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
 
-        # Verifica as colunas existentes nas anotações
-        colunas = conexao.execute(
-            "PRAGMA table_info(anotacoes)"
-        ).fetchall()
+        # Verifica as colunas existentes.
+        colunas_anotacoes = {
+            coluna["name"]
+            for coluna in conexao.execute(
+                "PRAGMA table_info(anotacoes)"
+            ).fetchall()
+        }
 
-        nomes_colunas = [
-            coluna["name"] for coluna in colunas
-        ]
-
-        # Adiciona categoria se ainda não existir
-        if "categoria" not in nomes_colunas:
+        # Adiciona categoria caso seja um banco antigo.
+        if "categoria" not in colunas_anotacoes:
             conexao.execute("""
                 ALTER TABLE anotacoes
                 ADD COLUMN categoria TEXT NOT NULL DEFAULT 'Geral'
             """)
 
-        # Adiciona favoritos se ainda não existir
-        if "favorita" not in nomes_colunas:
+        # Adiciona favorita caso seja um banco antigo.
+        if "favorita" not in colunas_anotacoes:
             conexao.execute("""
                 ALTER TABLE anotacoes
                 ADD COLUMN favorita INTEGER NOT NULL DEFAULT 0
             """)
 
-        # Tabela da meta diária
+        # --------------------------------------
+        # META DIÁRIA
+        # --------------------------------------
+
         conexao.execute("""
             CREATE TABLE IF NOT EXISTS meta_diaria (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
+                id INTEGER PRIMARY KEY,
                 minutos_meta INTEGER NOT NULL DEFAULT 60
             )
         """)
 
-        # Tabela das sessões de estudo
+        # --------------------------------------
+        # SESSÕES DE ESTUDO
+        # --------------------------------------
+
         conexao.execute("""
             CREATE TABLE IF NOT EXISTS sessoes_estudo (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 materia TEXT NOT NULL,
                 duracao_minutos INTEGER NOT NULL,
-                data_estudo TEXT NOT NULL
-                    DEFAULT (date('now', 'localtime')),
-                criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                identificador TEXT
+                data_estudo TEXT NOT NULL DEFAULT (
+                    date('now', 'localtime')
+                ),
+                criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
 
-        # Verifica as colunas existentes nas sessões
-        colunas_sessoes = conexao.execute(
-            "PRAGMA table_info(sessoes_estudo)"
-        ).fetchall()
+        # Migração para bancos criados antes do
+        # identificador único de sessão.
+        colunas_sessoes = {
+            coluna["name"]
+            for coluna in conexao.execute(
+                "PRAGMA table_info(sessoes_estudo)"
+            ).fetchall()
+        }
 
-        nomes_colunas_sessoes = [
-            coluna["name"] for coluna in colunas_sessoes
-        ]
-
-        # Atualiza bancos antigos sem apagar os registros
-        if "identificador" not in nomes_colunas_sessoes:
+        if "identificador" not in colunas_sessoes:
             conexao.execute("""
                 ALTER TABLE sessoes_estudo
                 ADD COLUMN identificador TEXT
             """)
 
-        # Impede a repetição de identificadores não nulos
+        # Impede que a mesma requisição de sessão
+        # seja registrada mais de uma vez.
         conexao.execute("""
             CREATE UNIQUE INDEX IF NOT EXISTS
-            idx_sessoes_identificador
+                idx_sessoes_identificador
             ON sessoes_estudo (identificador)
         """)
 
-        # Cria a meta inicial de 60 minutos, caso não exista
+        # --------------------------------------
+        # MATÉRIAS
+        # --------------------------------------
+
+        conexao.execute("""
+            CREATE TABLE IF NOT EXISTS materias (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nome TEXT NOT NULL UNIQUE,
+                descricao TEXT NOT NULL DEFAULT '',
+                criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # Insere as matérias iniciais sem duplicá-las.
+        for materia in MATERIAS_INICIAIS:
+            conexao.execute("""
+                INSERT OR IGNORE INTO materias (nome)
+                VALUES (?)
+            """, (materia,))
+
+        # --------------------------------------
+        # CURSOS
+        # --------------------------------------
+
+        conexao.execute("""
+            CREATE TABLE IF NOT EXISTS cursos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                titulo TEXT NOT NULL,
+                descricao TEXT NOT NULL DEFAULT '',
+                materia_id INTEGER,
+                criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+                FOREIGN KEY (materia_id)
+                    REFERENCES materias (id)
+                    ON DELETE SET NULL
+            )
+        """)
+
+        # --------------------------------------
+        # MÓDULOS DOS CURSOS
+        # --------------------------------------
+
+        conexao.execute("""
+            CREATE TABLE IF NOT EXISTS modulos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                curso_id INTEGER NOT NULL,
+                titulo TEXT NOT NULL,
+                descricao TEXT NOT NULL DEFAULT '',
+                ordem INTEGER NOT NULL DEFAULT 1,
+                criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+                FOREIGN KEY (curso_id)
+                    REFERENCES cursos (id)
+                    ON DELETE CASCADE
+            )
+        """)
+
+        # --------------------------------------
+        # META DIÁRIA PADRÃO
+        # --------------------------------------
+
         conexao.execute("""
             INSERT OR IGNORE INTO meta_diaria (
                 id,
@@ -131,6 +235,10 @@ def criar_tabelas():
             VALUES (1, 60)
         """)
 
+
+# ==========================================
+# EXECUÇÃO DIRETA DO ARQUIVO
+# ==========================================
 
 if __name__ == "__main__":
     criar_tabelas()
