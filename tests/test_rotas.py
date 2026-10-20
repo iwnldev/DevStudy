@@ -691,3 +691,371 @@ def test_csrf_bloqueia_post_sem_token(cliente):
     finally:
         # Restaura a configuração usada pelos outros testes
         app.config["WTF_CSRF_ENABLED"] = False
+
+        
+def criar_sessao_teste(materia="Python", duracao=30):
+    """Cria uma sessão de estudo no banco usado pelo teste."""
+    conexao = database.conectar()
+    try:
+        with conexao:
+            cursor = conexao.execute("""
+                INSERT INTO sessoes_estudo
+                    (materia, duracao_minutos, identificador)
+                VALUES (?, ?, ?)
+            """, (materia, duracao, str(uuid.uuid4())))
+
+            return cursor.lastrowid
+    finally:
+        conexao.close()
+
+
+def test_abrir_pagina_edicao_sessao(cliente):
+    sessao_id = criar_sessao_teste()
+
+    resposta = cliente.get(f"/editar-sessao/{sessao_id}")
+
+    assert resposta.status_code == 200
+    assert b"Python" in resposta.data
+
+
+def test_editar_sessao_atualiza_materia_e_duracao(cliente):
+    sessao_id = criar_sessao_teste()
+
+    resposta = cliente.post(
+        f"/editar-sessao/{sessao_id}",
+        data={
+            "materia": "JavaScript",
+            "duracao_minutos": "45"
+        },
+        follow_redirects=True
+    )
+
+    assert resposta.status_code == 200
+
+    conexao = database.conectar()
+    try:
+        sessao = conexao.execute("""
+            SELECT materia, duracao_minutos
+            FROM sessoes_estudo
+            WHERE id = ?
+        """, (sessao_id,)).fetchone()
+
+        assert sessao is not None
+        assert sessao["materia"] == "JavaScript"
+        assert sessao["duracao_minutos"] == 45
+    finally:
+        conexao.close()
+
+
+def test_editar_sessao_rejeita_dados_invalidos(cliente):
+    sessao_id = criar_sessao_teste()
+
+    resposta = cliente.post(
+        f"/editar-sessao/{sessao_id}",
+        data={
+            "materia": "Matéria inválida",
+            "duracao_minutos": "45"
+        }
+    )
+
+    assert resposta.status_code == 400
+
+    conexao = database.conectar()
+    try:
+        sessao = conexao.execute("""
+            SELECT materia, duracao_minutos
+            FROM sessoes_estudo
+            WHERE id = ?
+        """, (sessao_id,)).fetchone()
+
+        assert sessao["materia"] == "Python"
+        assert sessao["duracao_minutos"] == 30
+    finally:
+        conexao.close()
+
+
+def test_editar_sessao_inexistente(cliente):
+    resposta = cliente.get("/editar-sessao/99999")
+
+    assert resposta.status_code == 404
+
+
+def test_excluir_sessao_remove_registro(cliente):
+    sessao_id = criar_sessao_teste()
+
+    resposta = cliente.post(
+        f"/excluir-sessao/{sessao_id}",
+        follow_redirects=True
+    )
+
+    assert resposta.status_code == 200
+
+    conexao = database.conectar()
+    try:
+        sessao = conexao.execute("""
+            SELECT id
+            FROM sessoes_estudo
+            WHERE id = ?
+        """, (sessao_id,)).fetchone()
+
+        assert sessao is None
+    finally:
+        conexao.close()
+
+
+def test_excluir_sessao_inexistente(cliente):
+    resposta = cliente.post(
+        "/excluir-sessao/99999"
+    )
+
+    assert resposta.status_code == 404
+
+
+def test_calendario_abre_mes_atual(cliente):
+    from datetime import date
+
+    hoje = date.today()
+    resposta = cliente.get("/calendario")
+
+    assert resposta.status_code == 200
+    assert hoje.strftime("%Y") .encode() in resposta.data
+
+
+def test_calendario_aceita_mes_e_ano_validos(cliente):
+    resposta = cliente.get("/calendario?ano=2026&mes=10")
+
+    assert resposta.status_code == 200
+    assert b"Outubro" in resposta.data
+
+
+def test_calendario_corrige_mes_invalido(cliente):
+    resposta = cliente.get("/calendario?ano=2026&mes=13")
+
+    assert resposta.status_code == 200
+
+
+def test_calendario_corrige_ano_fora_do_limite(cliente):
+    resposta = cliente.get("/calendario?ano=1999&mes=10")
+
+    assert resposta.status_code == 200
+
+
+def test_calendario_corrige_parametros_nao_numericos(cliente):
+    resposta = cliente.get("/calendario?ano=abc&mes=xyz")
+
+    assert resposta.status_code == 200
+
+
+def test_calendario_aceita_data_selecionada_valida(cliente):
+    resposta = cliente.get(
+        "/calendario?ano=2026&mes=10&data=2026-10-18"
+    )
+
+    assert resposta.status_code == 200
+
+
+def test_calendario_ignora_data_de_outro_mes(cliente):
+    resposta = cliente.get(
+        "/calendario?ano=2026&mes=10&data=2026-11-18"
+    )
+
+    assert resposta.status_code == 200
+
+
+def test_calendario_ignora_data_em_formato_invalido(cliente):
+    resposta = cliente.get(
+        "/calendario?ano=2026&mes=10&data=data-invalida"
+    )
+
+    assert resposta.status_code == 200
+
+
+def test_calendario_funciona_na_virada_do_ano(cliente):
+    resposta_dezembro = cliente.get(
+        "/calendario?ano=2026&mes=12"
+    )
+    resposta_janeiro = cliente.get(
+        "/calendario?ano=2027&mes=1"
+    )
+
+    assert resposta_dezembro.status_code == 200
+    assert resposta_janeiro.status_code == 200
+
+
+# ==========================================
+# TESTES DE MATÉRIAS PERSONALIZADAS
+# ==========================================
+
+def test_pagina_materias_abre(cliente):
+    resposta = cliente.get("/materias")
+
+    assert resposta.status_code == 200
+    assert b"Minhas mat" in resposta.data
+
+
+def test_cadastrar_materia_personalizada(cliente):
+    resposta = cliente.post(
+        "/materias",
+        data={
+            "nome": "Inglês",
+            "descricao": "Estudo de vocabulário e gramática."
+        },
+        follow_redirects=True
+    )
+
+    assert resposta.status_code == 200
+    assert "Inglês".encode("utf-8") in resposta.data
+
+    conexao = database.conectar()
+    try:
+        materia = conexao.execute("""
+            SELECT nome, descricao
+            FROM materias
+            WHERE nome = ?
+        """, ("Inglês",)).fetchone()
+
+        assert materia is not None
+        assert materia["descricao"] == (
+            "Estudo de vocabulário e gramática."
+        )
+    finally:
+        conexao.close()
+
+
+def test_materias_rejeita_nome_duplicado_sem_diferenciar_maiusculas(
+    cliente
+):
+    cliente.post(
+        "/materias",
+        data={
+            "nome": "Inglês",
+            "descricao": ""
+        }
+    )
+
+    resposta = cliente.post(
+        "/materias",
+        data={
+            "nome": "INGLÊS",
+            "descricao": "Outra descrição"
+        }
+    )
+
+    assert resposta.status_code == 200
+    assert "Já existe uma matéria".encode("utf-8") in resposta.data
+
+    conexao = database.conectar()
+    try:
+        total = conexao.execute("""
+            SELECT COUNT(*)
+            FROM materias
+            WHERE nome = ? COLLATE NOCASE
+        """, ("Inglês",)).fetchone()[0]
+
+        assert total == 1
+    finally:
+        conexao.close()
+
+
+@pytest.mark.parametrize(
+    "nome",
+    [
+        "",
+        "   ",
+        "M" * 61
+    ]
+)
+def test_materias_rejeita_nome_invalido(cliente, nome):
+    resposta = cliente.post(
+        "/materias",
+        data={
+            "nome": nome,
+            "descricao": ""
+        }
+    )
+
+    assert resposta.status_code == 200
+    assert "Informe um nome de matéria".encode("utf-8") in resposta.data
+
+    conexao = database.conectar()
+    try:
+        total = conexao.execute("""
+            SELECT COUNT(*)
+            FROM materias
+        """).fetchone()[0]
+
+        # O banco contém apenas as matérias iniciais.
+        assert total == len(database.MATERIAS_INICIAIS)
+    finally:
+        conexao.close()
+
+
+def test_materias_rejeita_descricao_acima_do_limite(cliente):
+    resposta = cliente.post(
+        "/materias",
+        data={
+            "nome": "Matéria de teste",
+            "descricao": "D" * 301
+        }
+    )
+
+    assert resposta.status_code == 200
+    assert "descrição deve ter no máximo 300 caracteres".encode(
+        "utf-8"
+    ) in resposta.data
+
+    conexao = database.conectar()
+    try:
+        materia = conexao.execute("""
+            SELECT id
+            FROM materias
+            WHERE nome = ?
+        """, ("Matéria de teste",)).fetchone()
+
+        assert materia is None
+    finally:
+        conexao.close()
+
+
+def test_materias_aceita_descricao_vazia(cliente):
+    resposta = cliente.post(
+        "/materias",
+        data={
+            "nome": "Matemática",
+            "descricao": ""
+        },
+        follow_redirects=True
+    )
+
+    assert resposta.status_code == 200
+    assert "Matemática".encode("utf-8") in resposta.data
+
+
+def test_csrf_bloqueia_cadastro_materia_sem_token(cliente):
+    app.config["WTF_CSRF_ENABLED"] = True
+
+    try:
+        resposta = cliente.post(
+            "/materias",
+            data={
+                "nome": "Matéria protegida",
+                "descricao": ""
+            }
+        )
+
+        assert resposta.status_code == 400
+
+        conexao = database.conectar()
+        try:
+            materia = conexao.execute("""
+                SELECT id
+                FROM materias
+                WHERE nome = ?
+            """, ("Matéria protegida",)).fetchone()
+
+            assert materia is None
+        finally:
+            conexao.close()
+
+    finally:
+        app.config["WTF_CSRF_ENABLED"] = False
