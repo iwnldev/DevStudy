@@ -1,0 +1,77 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matérias | DevStudy</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <main class="container">
+        <h1>Minhas matérias</h1>
+        <p>Organize seus estudos por assunto.</p>
+
+        <p>
+            <a href="{{ url_for('inicio') }}">Voltar à página inicial</a>
+        </p>
+
+        {% if erro %}
+            <p role="alert">{{ erro }}</p>
+        {% endif %}
+
+        <section>
+            <h2>Cadastrar nova matéria</h2>
+
+            <form method="POST" action="{{ url_for('gerenciar_materias') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <div>
+                    <label for="nome">Nome da matéria</label>
+                    <input
+                        type="text"
+                        id="nome"
+                        name="nome"
+                        maxlength="60"
+                        required
+                        placeholder="Ex.: Inglês"
+                    >
+                </div>
+
+                <div>
+                    <label for="descricao">Descrição (opcional)</label>
+                    <textarea
+                        id="descricao"
+                        name="descricao"
+                        maxlength="300"
+                        rows="3"
+                        placeholder="O que você pretende estudar?"
+                    ></textarea>
+                </div>
+
+                <button type="submit">Cadastrar matéria</button>
+            </form>
+        </section>
+
+        <section>
+            <h2>Matérias cadastradas</h2>
+
+            {% if materias %}
+                <ul>
+                    {% for materia in materias %}
+                        <li>
+                            <strong>{{ materia["nome"] }}</strong>
+
+                            {% if materia["descricao"] %}
+                                <p>{{ materia["descricao"] }}</p>
+                            {% endif %}
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>Nenhuma matéria cadastrada.</p>
+            {% endif %}
+        </section>
+    </main>
+</body>
+</html>
