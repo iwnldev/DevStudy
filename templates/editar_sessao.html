@@ -1,0 +1,104 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Editar sessão | DevStudy</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='style.css') }}"
+    >
+</head>
+<body>
+    <header class="cabecalho-principal">
+        <div class="cabecalho-conteudo">
+            <a href="{{ url_for('inicio') }}" class="marca-devstudy">
+                <span class="marca-icone">D</span>
+                <span>DevStudy</span>
+            </a>
+
+            <p>Corrija os dados da sua sessão de estudo.</p>
+        </div>
+    </header>
+
+    <main class="pagina-historico">
+        <section class="secao-grafico">
+            <div class="titulo-secao-historico">
+                <span class="subtitulo-secao">SEU PROGRESSO</span>
+                <h1>Editar sessão de estudo</h1>
+
+                <p>
+                    Altere a matéria ou a duração registrada.
+                </p>
+            </div>
+
+            {% if erro %}
+                <p role="alert">{{ erro }}</p>
+            {% endif %}
+
+            <form
+                action="{{ url_for('editar_sessao', id=sessao['id']) }}"
+                method="POST"
+            >
+                <input
+                    type="hidden"
+                    name="csrf_token"
+                    value="{{ csrf_token() }}"
+                >
+
+                <div>
+                    <label for="materia">Matéria</label>
+
+                    <select id="materia" name="materia" required>
+                        {% for materia in materias %}
+                            <option
+                                value="{{ materia }}"
+                                {% if materia == sessao['materia'] %}
+                                    selected
+                                {% endif %}
+                            >
+                                {{ materia }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label for="duracao_minutos">
+                        Duração em minutos
+                    </label>
+
+                    <input
+                        type="number"
+                        id="duracao_minutos"
+                        name="duracao_minutos"
+                        min="1"
+                        max="1440"
+                        value="{{ sessao['duracao_minutos'] }}"
+                        required
+                    >
+                </div>
+
+                <p>
+                    Data original:
+                    <strong>{{ sessao['data_estudo'] }}</strong>
+                </p>
+
+                <button class="botao" type="submit">
+                    Salvar alterações
+                </button>
+
+                <a
+                    class="link-voltar"
+                    href="{{ url_for('historico') }}#sessoes"
+                >
+                    Cancelar
+                </a>
+            </form>
+        </section>
+    </main>
+</body>
+</html>
