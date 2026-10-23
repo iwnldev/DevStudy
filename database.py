@@ -223,6 +223,27 @@ def criar_tabelas():
             )
         """)
 
+        
+        # --------------------------------------
+        # AULAS DOS MÓDULOS
+        # --------------------------------------
+
+        conexao.execute("""
+            CREATE TABLE IF NOT EXISTS aulas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                modulo_id INTEGER NOT NULL,
+                titulo TEXT NOT NULL,
+                conteudo TEXT NOT NULL DEFAULT '',
+                ordem INTEGER NOT NULL DEFAULT 1,
+                criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+                FOREIGN KEY (modulo_id)
+                    REFERENCES modulos (id)
+                    ON DELETE CASCADE
+            )
+        """)
+
+
         # --------------------------------------
         # META DIÁRIA PADRÃO
         # --------------------------------------
