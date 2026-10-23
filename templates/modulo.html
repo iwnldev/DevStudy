@@ -1,0 +1,209 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>{{ modulo.titulo }} | DevStudy</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 30px 16px;
+            font-family: Arial, sans-serif;
+            background: #101827;
+            color: #f1f5f9;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: auto;
+        }
+
+        a {
+            color: #60a5fa;
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        .painel, .aula {
+            padding: 24px;
+            margin: 24px 0;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+        }
+
+        .detalhes {
+            color: #cbd5e1;
+            line-height: 1.7;
+        }
+
+        label {
+            display: block;
+            margin: 16px 0 8px;
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #475569;
+            border-radius: 7px;
+            background: #0f172a;
+            color: #f8fafc;
+            font: inherit;
+        }
+
+        textarea {
+            min-height: 150px;
+            resize: vertical;
+        }
+
+        button {
+            padding: 12px 18px;
+            margin-top: 16px;
+            border: 0;
+            border-radius: 7px;
+            background: #2563eb;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        .vazio {
+            color: #cbd5e1;
+        }
+
+        .mensagens {
+            padding: 12px;
+            margin: 16px 0;
+            border-radius: 7px;
+            background: #172554;
+            color: #bfdbfe;
+        }
+
+        .conteudo-aula {
+            line-height: 1.8;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 20px 12px;
+            }
+
+            .painel, .aula {
+                padding: 18px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="container">
+        <header>
+            <a href="{{ url_for(
+                'visualizar_curso',
+                curso_id=modulo.curso_id
+            ) }}">
+                ← Voltar para o curso
+            </a>
+
+            <h1>{{ modulo.titulo }}</h1>
+
+            <p class="detalhes">
+                {{ modulo.descricao or 'Este módulo ainda não possui descrição.' }}
+            </p>
+
+            <p class="detalhes">
+                Curso: {{ modulo.curso_titulo }}
+            </p>
+        </header>
+
+        <section class="painel">
+            <h2>Adicionar aula</h2>
+
+            {% with mensagens = get_flashed_messages(with_categories=true) %}
+                {% for categoria, mensagem in mensagens %}
+                    <p class="mensagens">{{ mensagem }}</p>
+                {% endfor %}
+            {% endwith %}
+
+            <form
+                action="{{ url_for(
+                    'nova_aula',
+                    modulo_id=modulo.id
+                ) }}"
+                method="POST"
+            >
+                <input
+                    type="hidden"
+                    name="csrf_token"
+                    value="{{ csrf_token() }}"
+                >
+
+                <label for="titulo">Título da aula</label>
+                <input
+                    type="text"
+                    id="titulo"
+                    name="titulo"
+                    maxlength="200"
+                    placeholder="Ex.: Variáveis em Python"
+                    required
+                >
+
+                <label for="conteudo">Conteúdo da aula</label>
+                <textarea
+                    id="conteudo"
+                    name="conteudo"
+                    placeholder="Escreva o conteúdo que deseja estudar..."
+                ></textarea>
+
+                <label for="ordem">Ordem da aula</label>
+                <input
+                    type="number"
+                    id="ordem"
+                    name="ordem"
+                    min="1"
+                    value="{{ aulas|length + 1 }}"
+                    required
+                >
+
+                <button type="submit">Cadastrar aula</button>
+            </form>
+        </section>
+
+        <section>
+            <h2>Aulas do módulo</h2>
+
+            {% if aulas %}
+                {% for aula in aulas %}
+                    <article class="aula">
+                        <h3>{{ aula.ordem }}. {{ aula.titulo }}</h3>
+
+                        <div class="conteudo-aula">{{ aula.conteudo or 'Esta aula ainda não possui conteúdo.' }}</div>
+                    </article>
+                {% endfor %}
+            {% else %}
+                <p class="vazio">
+                    Este módulo ainda não possui aulas.
+                    Utilize o formulário acima para cadastrar a primeira.
+                </p>
+            {% endif %}
+        </section>
+    </main>
+</body>
+</html>
