@@ -1,5 +1,5 @@
 
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, abort, flash
 from flask_wtf.csrf import CSRFProtect
 import os
 import uuid
@@ -343,6 +343,87 @@ def excluir_modulo(modulo_id):
         "visualizar_curso",
         curso_id=curso_id
     ))
+
+
+@app.route("/modulo/<int:modulo_id>")
+def visualizar_modulo(modulo_id):
+    """Exibe um módulo e suas aulas."""
+
+    with conexao_aberta() as conexao:
+        modulo = conexao.execute("""
+            SELECT
+                modulos.*,
+                cursos.titulo AS curso_titulo,
+                cursos.id AS curso_id
+            FROM modulos
+            JOIN cursos ON cursos.id = modulos.curso_id
+            WHERE modulos.id = ?
+        """, (modulo_id,)).fetchone()
+
+        if modulo is None:
+            abort(404)
+
+        aulas = conexao.execute("""
+            SELECT *
+            FROM aulas
+            WHERE modulo_id = ?
+            ORDER BY ordem ASC, id ASC
+        """, (modulo_id,)).fetchall()
+
+    return render_template(
+        "modulo.html",
+        modulo=modulo,
+        aulas=aulas
+    )
+
+
+@app.route("/modulo/<int:modulo_id>/nova-aula", methods=["POST"])
+def nova_aula(modulo_id):
+    """Cadastra uma aula em um módulo."""
+
+    titulo = request.form.get("titulo", "").strip()
+    conteudo = request.form.get("conteudo", "").strip()
+    ordem_texto = request.form.get("ordem", "1").strip()
+
+    if not titulo:
+        flash("Informe o título da aula.", "erro")
+        return redirect(url_for(
+            "visualizar_modulo",
+            modulo_id=modulo_id
+        ))
+
+    try:
+        ordem = int(ordem_texto)
+        if ordem < 1:
+            raise ValueError
+    except ValueError:
+        flash("A ordem da aula deve ser um número inteiro maior que zero.", "erro")
+        return redirect(url_for(
+            "visualizar_modulo",
+            modulo_id=modulo_id
+        ))
+
+    with conexao_aberta() as conexao:
+        modulo = conexao.execute(
+            "SELECT id FROM modulos WHERE id = ?",
+            (modulo_id,)
+        ).fetchone()
+
+        if modulo is None:
+            abort(404)
+
+        conexao.execute("""
+            INSERT INTO aulas (modulo_id, titulo, conteudo, ordem)
+            VALUES (?, ?, ?, ?)
+        """, (modulo_id, titulo, conteudo, ordem))
+
+    flash("Aula cadastrada com sucesso!", "sucesso")
+
+    return redirect(url_for(
+        "visualizar_modulo",
+        modulo_id=modulo_id
+    ))
+
 
 
 # ==========================================
