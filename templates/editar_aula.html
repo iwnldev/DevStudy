@@ -1,0 +1,58 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editar aula | DevStudy</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <main class="container">
+        <h1>Editar aula</h1>
+        <p>Atualize as informações desta aula.</p>
+
+        {% with mensagens = get_flashed_messages(with_categories=true) %}
+            {% if mensagens %}
+                {% for categoria, mensagem in mensagens %}
+                    <p class="mensagem {{ categoria }}">{{ mensagem }}</p>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <label for="titulo">Título da aula</label>
+            <input
+                type="text"
+                id="titulo"
+                name="titulo"
+                value="{{ aula['titulo'] }}"
+                required
+            >
+
+            <label for="conteudo">Conteúdo</label>
+            <textarea id="conteudo" name="conteudo" rows="10">{{ aula['conteudo'] }}</textarea>
+
+            <label for="ordem">Ordem da aula</label>
+            <input
+                type="number"
+                id="ordem"
+                name="ordem"
+                min="1"
+                value="{{ aula['ordem'] }}"
+                required
+            >
+
+            <button type="submit">Salvar alterações</button>
+        </form>
+
+        <p>
+            <a href="{{ url_for('visualizar_modulo', modulo_id=aula['modulo_id']) }}">
+                Voltar ao módulo
+            </a>
+        </p>
+    </main>
+</body>
+</html>
