@@ -230,9 +230,11 @@ def novo_curso():
     return redirect(url_for("listar_cursos"))
 
 
+
 @app.route("/curso/<int:curso_id>")
 def visualizar_curso(curso_id):
-    """Exibe os detalhes de um curso e seus módulos."""
+    """Exibe os detalhes de um curso e o progresso de seus módulos."""
+
     with conexao_aberta() as conexao:
         curso = conexao.execute("""
             SELECT
@@ -252,25 +254,88 @@ def visualizar_curso(curso_id):
 
         modulos = conexao.execute("""
             SELECT
-                id,
-                curso_id,
-                titulo,
-                descricao,
-                ordem,
-                criado_em
+                modulos.id,
+                modulos.curso_id,
+                modulos.titulo,
+                modulos.descricao,
+                modulos.ordem,
+                modulos.criado_em,
+
+                COUNT(aulas.id) AS total_aulas,
+
+                COALESCE(
+                    SUM(
+                        CASE
+                            WHEN aulas.concluida = 1 THEN 1
+                            ELSE 0
+                        END
+                    ),
+                    0
+                ) AS aulas_concluidas
+
             FROM modulos
-            WHERE curso_id = ?
-            ORDER BY ordem, id
+
+            LEFT JOIN aulas
+                ON aulas.modulo_id = modulos.id
+
+            WHERE modulos.curso_id = ?
+
+            GROUP BY
+                modulos.id,
+                modulos.curso_id,
+                modulos.titulo,
+                modulos.descricao,
+                modulos.ordem,
+                modulos.criado_em
+
+            ORDER BY modulos.ordem, modulos.id
         """, (curso_id,)).fetchall()
+
+        # Calcula o progresso individual de cada módulo.
+        modulos_com_progresso = []
+        total_aulas_curso = 0
+        aulas_concluidas_curso = 0
+
+        for modulo in modulos:
+            total_aulas = modulo["total_aulas"]
+            aulas_concluidas = modulo["aulas_concluidas"]
+
+            if total_aulas > 0:
+                percentual_progresso = round(
+                    aulas_concluidas / total_aulas * 100
+                )
+            else:
+                percentual_progresso = 0
+
+            # Converte a linha do banco em um dicionário
+            # para adicionar o percentual de progresso.
+            modulo_dict = dict(modulo)
+            modulo_dict["percentual_progresso"] = percentual_progresso
+
+            modulos_com_progresso.append(modulo_dict)
+
+            total_aulas_curso += total_aulas
+            aulas_concluidas_curso += aulas_concluidas
+
+        # Calcula o progresso geral do curso.
+        if total_aulas_curso > 0:
+            percentual_curso = round(
+                aulas_concluidas_curso / total_aulas_curso * 100
+            )
+        else:
+            percentual_curso = 0
 
         materias = buscar_materias(conexao)
 
     return render_template(
         "curso.html",
         curso=curso,
-        modulos=modulos,
+        modulos=modulos_com_progresso,
         materias=materias,
-        erro=None
+        erro=None,
+        total_aulas_curso=total_aulas_curso,
+        aulas_concluidas_curso=aulas_concluidas_curso,
+        percentual_curso=percentual_curso
     )
 
 
@@ -423,6 +488,132 @@ def nova_aula(modulo_id):
         "visualizar_modulo",
         modulo_id=modulo_id
     ))
+
+    
+@app.route("/aula/<int:aula_id>/editar", methods=["GET", "POST"])
+def editar_aula(aula_id):
+    """Edita uma aula existente."""
+
+    with conexao_aberta() as conexao:
+        aula = conexao.execute("""
+            SELECT
+                aulas.*,
+                modulos.id AS modulo_id
+            FROM aulas
+            JOIN modulos ON modulos.id = aulas.modulo_id
+            WHERE aulas.id = ?
+        """, (aula_id,)).fetchone()
+
+        if aula is None:
+            abort(404)
+
+        if request.method == "POST":
+            titulo = request.form.get("titulo", "").strip()
+            conteudo = request.form.get("conteudo", "").strip()
+            ordem_texto = request.form.get("ordem", "1").strip()
+
+            if not titulo:
+                flash("Informe o título da aula.", "erro")
+                return redirect(url_for(
+                    "editar_aula",
+                    aula_id=aula_id
+                ))
+
+            try:
+                ordem = int(ordem_texto)
+                if ordem < 1:
+                    raise ValueError
+            except ValueError:
+                flash(
+                    "A ordem deve ser um número inteiro maior que zero.",
+                    "erro"
+                )
+                return redirect(url_for(
+                    "editar_aula",
+                    aula_id=aula_id
+                ))
+
+            conexao.execute("""
+                UPDATE aulas
+                SET titulo = ?, conteudo = ?, ordem = ?
+                WHERE id = ?
+            """, (titulo, conteudo, ordem, aula_id))
+
+            modulo_id = aula["modulo_id"]
+
+            flash("Aula atualizada com sucesso!", "sucesso")
+
+            return redirect(url_for(
+                "visualizar_modulo",
+                modulo_id=modulo_id
+            ))
+
+        return render_template("editar_aula.html", aula=aula)
+
+
+@app.route("/aula/<int:aula_id>/excluir", methods=["POST"])
+def excluir_aula(aula_id):
+    """Exclui uma aula existente."""
+
+    with conexao_aberta() as conexao:
+        aula = conexao.execute("""
+            SELECT id, modulo_id
+            FROM aulas
+            WHERE id = ?
+        """, (aula_id,)).fetchone()
+
+        if aula is None:
+            abort(404)
+
+        modulo_id = aula["modulo_id"]
+
+        conexao.execute("""
+            DELETE FROM aulas
+            WHERE id = ?
+        """, (aula_id,))
+
+    flash("Aula excluída com sucesso!", "sucesso")
+
+    return redirect(url_for(
+        "visualizar_modulo",
+        modulo_id=modulo_id
+    ))
+
+
+@app.route("/aula/<int:aula_id>/concluir", methods=["POST"])
+def alternar_conclusao_aula(aula_id):
+    """Marca uma aula como concluída ou reabre a aula."""
+
+    with conexao_aberta() as conexao:
+        aula = conexao.execute("""
+            SELECT id, modulo_id, concluida
+            FROM aulas
+            WHERE id = ?
+        """, (aula_id,)).fetchone()
+
+        if aula is None:
+            abort(404)
+
+        novo_status = 0 if aula["concluida"] else 1
+
+        conexao.execute("""
+            UPDATE aulas
+            SET concluida = ?
+            WHERE id = ?
+        """, (novo_status, aula_id))
+
+        modulo_id = aula["modulo_id"]
+
+    if novo_status:
+        flash("Aula marcada como concluída!", "sucesso")
+    else:
+        flash("Aula reaberta para estudo.", "sucesso")
+
+    return redirect(url_for(
+        "visualizar_modulo",
+        modulo_id=modulo_id
+    ))
+
 
 
 
