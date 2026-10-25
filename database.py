@@ -245,6 +245,25 @@ def criar_tabelas():
 
 
         # --------------------------------------
+        # MIGRAÇÃO: CONTROLE DE AULAS CONCLUÍDAS
+        # --------------------------------------
+
+        colunas_aulas = conexao.execute(
+            "PRAGMA table_info(aulas)"
+        ).fetchall()
+
+        nomes_colunas = [
+            coluna["name"] for coluna in colunas_aulas
+        ]
+
+        if "concluida" not in nomes_colunas:
+            conexao.execute("""
+                ALTER TABLE aulas
+                ADD COLUMN concluida INTEGER NOT NULL DEFAULT 0
+            """)
+
+
+        # --------------------------------------
         # META DIÁRIA PADRÃO
         # --------------------------------------
 
