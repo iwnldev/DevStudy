@@ -129,6 +129,154 @@
 
         </section>
 
+        
+<!-- Resumo dos cursos e do progresso de aprendizagem -->
+<section class="secao-cursos-painel" id="progresso-cursos">
+
+    <div class="cabecalho-secao-cursos">
+        <div>
+            <h2>📚 Meus cursos</h2>
+            <p>Acompanhe sua evolução nos conteúdos cadastrados.</p>
+        </div>
+
+        <a href="{{ url_for('listar_cursos') }}">
+            Gerenciar cursos →
+        </a>
+    </div>
+
+    <div class="estatisticas-cursos">
+
+        <article class="cartao-estatistica">
+            <span>Cursos</span>
+            <strong>{{ total_cursos }}</strong>
+        </article>
+
+        <article class="cartao-estatistica">
+            <span>Módulos</span>
+            <strong>{{ total_modulos }}</strong>
+        </article>
+
+        <article class="cartao-estatistica">
+            <span>Total de aulas</span>
+            <strong>{{ total_aulas }}</strong>
+        </article>
+
+        <article class="cartao-estatistica">
+            <span>Aulas concluídas</span>
+            <strong>{{ aulas_concluidas }}</strong>
+        </article>
+
+    </div>
+
+    <div class="resumo-progresso-cursos">
+        <div class="cabecalho-progresso-cursos">
+            <span>Progresso geral das aulas</span>
+            <strong>{{ progresso_cursos }}%</strong>
+        </div>
+
+        <div
+            class="barra-progresso"
+            role="progressbar"
+            aria-label="Progresso geral dos cursos"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="{{ progresso_cursos }}"
+        >
+            <div
+                class="progresso-preenchido"
+                style="--progresso: {{ progresso_cursos }}%;"
+            ></div>
+        </div>
+    </div>
+
+    <div class="lista-cursos-painel">
+
+        {% if cursos_painel %}
+
+            {% for curso in cursos_painel %}
+
+                <article class="cartao-curso-painel">
+
+                    <div class="informacoes-curso-painel">
+                        <h3>{{ curso["titulo"] }}</h3>
+
+                        {% if curso["materia_nome"] %}
+                            <p>{{ curso["materia_nome"] }}</p>
+                        {% else %}
+                            <p>Sem matéria associada</p>
+                        {% endif %}
+
+                        <span>
+                            {{ curso["total_modulos"] }} módulo(s)
+                            ·
+                            {{ curso["aulas_concluidas"] }}
+                            de
+                            {{ curso["total_aulas"] }} aula(s) concluída(s)
+                        </span>
+                    </div>
+
+                    <div class="progresso-individual-curso">
+
+                        {% if curso["total_aulas"] > 0 %}
+                            {% set percentual = (
+                                curso["aulas_concluidas"]
+                                / curso["total_aulas"] * 100
+                            ) | round | int %}
+                        {% else %}
+                            {% set percentual = 0 %}
+                        {% endif %}
+
+                        <div class="cabecalho-progresso-cursos">
+                            <span>Progresso</span>
+                            <strong>{{ percentual }}%</strong>
+                        </div>
+
+                        <div
+                            class="barra-progresso"
+                            role="progressbar"
+                            aria-label="Progresso do curso {{ curso['titulo'] }}"
+                            aria-valuemin="0"
+                            aria-valuemax="100"
+                            aria-valuenow="{{ percentual }}"
+                        >
+                            <div
+                                class="progresso-preenchido"
+                                style="--progresso: {{ percentual }}%;"
+                            ></div>
+                        </div>
+
+                        <a href="{{ url_for(
+                            'visualizar_curso',
+                            curso_id=curso['id']
+                        ) }}">
+                            Continuar estudando →
+                        </a>
+
+                    </div>
+
+                </article>
+
+            {% endfor %}
+
+        {% else %}
+
+            <div class="estado-vazio-cursos">
+                <h3>Você ainda não cadastrou cursos</h3>
+                <p>
+                    Organize seus estudos criando cursos, módulos e aulas.
+                </p>
+                <a href="{{ url_for('listar_cursos') }}">
+                    Criar meu primeiro curso
+                </a>
+            </div>
+
+        {% endif %}
+
+    </div>
+
+</section>
+
+
         <!-- Cronômetro Pomodoro -->
         <section class="pomodoro" id="pomodoro">
 
