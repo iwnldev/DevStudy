@@ -21,8 +21,9 @@
         }
 
         .container {
+            width: 100%;
             max-width: 900px;
-            margin: auto;
+            margin: 0 auto;
         }
 
         a {
@@ -47,6 +48,7 @@
         .detalhes {
             color: #cbd5e1;
             line-height: 1.6;
+            overflow-wrap: anywhere;
         }
 
         label {
@@ -56,6 +58,7 @@
 
         input,
         textarea {
+            display: block;
             width: 100%;
             padding: 12px;
             border: 1px solid #475569;
@@ -63,6 +66,14 @@
             background: #0f172a;
             color: #f8fafc;
             font: inherit;
+        }
+
+        input:focus,
+        textarea:focus,
+        button:focus-visible,
+        a:focus-visible {
+            outline: 2px solid #60a5fa;
+            outline-offset: 3px;
         }
 
         textarea {
@@ -76,7 +87,8 @@
             border: 0;
             border-radius: 7px;
             background: #2563eb;
-            color: white;
+            color: #fff;
+            font: inherit;
             font-weight: bold;
             cursor: pointer;
         }
@@ -107,8 +119,12 @@
         .acoes-modulo {
             display: flex;
             align-items: center;
-            gap: 16px;
+            gap: 12px;
             flex-wrap: wrap;
+        }
+
+        .acoes-modulo form {
+            margin: 0;
         }
 
         .link-aulas {
@@ -128,6 +144,7 @@
 
         .vazio {
             color: #cbd5e1;
+            line-height: 1.6;
         }
 
         /* Progresso geral do curso */
@@ -199,8 +216,18 @@
                 padding: 18px;
             }
 
+            .cabecalho-modulo {
+                flex-direction: column;
+            }
+
             .acoes-modulo {
                 width: 100%;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .barra-progresso-preenchimento {
+                transition: none;
             }
         }
     </style>
@@ -228,9 +255,9 @@
 
         <!-- Progresso geral do curso -->
 
-        <section class="progresso-curso">
+        <section class="progresso-curso" aria-labelledby="titulo-progresso-curso">
             <div class="progresso-info">
-                <h2>Progresso do curso</h2>
+                <h2 id="titulo-progresso-curso">Progresso do curso</h2>
 
                 <span class="progresso-percentual">
                     {{ percentual_curso }}%
@@ -259,11 +286,11 @@
 
         <!-- Formulário para adicionar módulos -->
 
-        <section class="painel">
-            <h2>Adicionar módulo</h2>
+        <section class="painel" aria-labelledby="titulo-adicionar-modulo">
+            <h2 id="titulo-adicionar-modulo">Adicionar módulo</h2>
 
             {% if erro %}
-                <p class="mensagem-erro">{{ erro }}</p>
+                <p class="mensagem-erro" role="alert">{{ erro }}</p>
             {% endif %}
 
             <form
@@ -277,7 +304,6 @@
                 >
 
                 <label for="titulo">Nome do módulo</label>
-
                 <input
                     type="text"
                     id="titulo"
@@ -288,7 +314,6 @@
                 >
 
                 <label for="descricao">Descrição do módulo</label>
-
                 <textarea
                     id="descricao"
                     name="descricao"
@@ -297,7 +322,6 @@
                 ></textarea>
 
                 <label for="ordem">Ordem do módulo</label>
-
                 <input
                     type="number"
                     id="ordem"
@@ -314,17 +338,14 @@
 
         <!-- Lista de módulos -->
 
-        <section>
-            <h2>Módulos do curso</h2>
+        <section aria-labelledby="titulo-lista-modulos">
+            <h2 id="titulo-lista-modulos">Módulos do curso</h2>
 
             {% if modulos %}
-
                 {% for modulo in modulos %}
-
                     <article class="modulo">
 
                         <div class="cabecalho-modulo">
-
                             <div>
                                 <h3>
                                     {{ modulo.ordem }}. {{ modulo.titulo }}
@@ -334,11 +355,9 @@
                                     {{ modulo.descricao or 'Sem descrição.' }}
                                 </p>
 
-                                <!-- Progresso do módulo:
-                                     fica dentro do laço porque usa modulo. -->
+                                <!-- Progresso individual do módulo -->
 
                                 <div class="progresso-modulo">
-
                                     <div class="progresso-info">
                                         <h4>Progresso do módulo</h4>
 
@@ -365,12 +384,10 @@
                                         {{ modulo.aulas_concluidas }} de
                                         {{ modulo.total_aulas }} aula(s) concluída(s)
                                     </p>
-
                                 </div>
                             </div>
 
                             <div class="acoes-modulo">
-
                                 <a
                                     class="link-aulas"
                                     href="{{ url_for(
@@ -387,7 +404,7 @@
                                         modulo_id=modulo.id
                                     ) }}"
                                     method="POST"
-                                    onsubmit="return confirm('Deseja realmente excluir este módulo e suas aulas?');"
+                                    onsubmit="return confirm('Deseja realmente excluir este módulo e suas aulas? Esta ação não pode ser desfeita.');"
                                 >
                                     <input
                                         type="hidden"
@@ -402,21 +419,16 @@
                                         Excluir módulo
                                     </button>
                                 </form>
-
                             </div>
                         </div>
 
                     </article>
-
                 {% endfor %}
-
             {% else %}
-
                 <p class="vazio">
                     Este curso ainda não possui módulos.
                     Use o formulário acima para adicionar o primeiro.
                 </p>
-
             {% endif %}
         </section>
 
