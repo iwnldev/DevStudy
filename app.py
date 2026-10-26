@@ -10,11 +10,9 @@ import unicodedata
 from database import conexao_aberta, criar_tabelas
 
 app = Flask(__name__)
-
 app.config["SECRET_KEY"] = os.environ.get("DEVSTUDY_SECRET_KEY")
 
 csrf = CSRFProtect(app)
-
 
 # ==========================================
 # CONFIGURAÇÕES
@@ -37,7 +35,6 @@ MATERIAS_ESTUDO = [
     "Faculdade - ADS",
     "Geral"
 ]
-
 
 # ==========================================
 # FUNÇÕES DE VALIDAÇÃO
@@ -75,7 +72,7 @@ def validar_inteiro(valor, minimo, maximo):
 
 
 def buscar_materias(conexao):
-    """Retorna as matérias cadastradas, em ordem alfabética."""
+    """Retorna as matérias cadastradas em ordem alfabética."""
     return conexao.execute("""
         SELECT id, nome, descricao
         FROM materias
@@ -133,6 +130,7 @@ def gerenciar_materias():
                         VALUES (?, ?)
                     """, (nome, descricao))
 
+                    flash("Matéria cadastrada com sucesso!", "sucesso")
                     return redirect(url_for("gerenciar_materias"))
 
     with conexao_aberta() as conexao:
@@ -146,9 +144,8 @@ def gerenciar_materias():
 
 
 # ==========================================
-# CURSOS E MÓDULOS
+# CURSOS
 # ==========================================
-
 
 @app.route("/cursos")
 def listar_cursos():
@@ -161,7 +158,7 @@ def listar_cursos():
                 cursos.descricao,
                 cursos.criado_em,
                 materias.nome AS materia_nome,
-                COUNT(modulos.id) AS total_modulos
+                COUNT(DISTINCT modulos.id) AS total_modulos
             FROM cursos
             LEFT JOIN materias
                 ON materias.id = cursos.materia_id
@@ -181,7 +178,6 @@ def listar_cursos():
     )
 
 
-
 @app.route("/novo-curso", methods=["POST"])
 def novo_curso():
     """Cadastra um curso e associa uma matéria opcional."""
@@ -194,9 +190,11 @@ def novo_curso():
     materia_id_texto = request.form.get("materia_id", "").strip()
 
     if titulo is None:
+        flash("Informe um título de curso com até 120 caracteres.", "erro")
         return redirect(url_for("listar_cursos"))
 
     if len(descricao) > 1000:
+        flash("A descrição do curso deve ter até 1.000 caracteres.", "erro")
         return redirect(url_for("listar_cursos"))
 
     materia_id = None
@@ -209,6 +207,7 @@ def novo_curso():
         )
 
         if materia_id is None:
+            flash("Selecione uma matéria válida.", "erro")
             return redirect(url_for("listar_cursos"))
 
     with conexao_aberta() as conexao:
@@ -220,6 +219,7 @@ def novo_curso():
             """, (materia_id,)).fetchone()
 
             if materia is None:
+                flash("A matéria selecionada não existe.", "erro")
                 return redirect(url_for("listar_cursos"))
 
         conexao.execute("""
@@ -227,14 +227,13 @@ def novo_curso():
             VALUES (?, ?, ?)
         """, (titulo, descricao, materia_id))
 
+    flash("Curso cadastrado com sucesso!", "sucesso")
     return redirect(url_for("listar_cursos"))
-
 
 
 @app.route("/curso/<int:curso_id>")
 def visualizar_curso(curso_id):
-    """Exibe os detalhes de um curso e o progresso de seus módulos."""
-
+    """Exibe os detalhes do curso e o progresso dos módulos."""
     with conexao_aberta() as conexao:
         curso = conexao.execute("""
             SELECT
@@ -250,7 +249,7 @@ def visualizar_curso(curso_id):
         """, (curso_id,)).fetchone()
 
         if curso is None:
-            return "Curso não encontrado.", 404
+            abort(404)
 
         modulos = conexao.execute("""
             SELECT
@@ -260,9 +259,7 @@ def visualizar_curso(curso_id):
                 modulos.descricao,
                 modulos.ordem,
                 modulos.criado_em,
-
                 COUNT(aulas.id) AS total_aulas,
-
                 COALESCE(
                     SUM(
                         CASE
@@ -272,14 +269,10 @@ def visualizar_curso(curso_id):
                     ),
                     0
                 ) AS aulas_concluidas
-
             FROM modulos
-
             LEFT JOIN aulas
                 ON aulas.modulo_id = modulos.id
-
             WHERE modulos.curso_id = ?
-
             GROUP BY
                 modulos.id,
                 modulos.curso_id,
@@ -287,11 +280,9 @@ def visualizar_curso(curso_id):
                 modulos.descricao,
                 modulos.ordem,
                 modulos.criado_em
-
             ORDER BY modulos.ordem, modulos.id
         """, (curso_id,)).fetchall()
 
-        # Calcula o progresso individual de cada módulo.
         modulos_com_progresso = []
         total_aulas_curso = 0
         aulas_concluidas_curso = 0
@@ -300,30 +291,22 @@ def visualizar_curso(curso_id):
             total_aulas = modulo["total_aulas"]
             aulas_concluidas = modulo["aulas_concluidas"]
 
-            if total_aulas > 0:
-                percentual_progresso = round(
-                    aulas_concluidas / total_aulas * 100
-                )
-            else:
-                percentual_progresso = 0
+            percentual = (
+                round(aulas_concluidas / total_aulas * 100)
+                if total_aulas > 0 else 0
+            )
 
-            # Converte a linha do banco em um dicionário
-            # para adicionar o percentual de progresso.
             modulo_dict = dict(modulo)
-            modulo_dict["percentual_progresso"] = percentual_progresso
-
+            modulo_dict["percentual_progresso"] = percentual
             modulos_com_progresso.append(modulo_dict)
 
             total_aulas_curso += total_aulas
             aulas_concluidas_curso += aulas_concluidas
 
-        # Calcula o progresso geral do curso.
-        if total_aulas_curso > 0:
-            percentual_curso = round(
-                aulas_concluidas_curso / total_aulas_curso * 100
-            )
-        else:
-            percentual_curso = 0
+        percentual_curso = (
+            round(aulas_concluidas_curso / total_aulas_curso * 100)
+            if total_aulas_curso > 0 else 0
+        )
 
         materias = buscar_materias(conexao)
 
@@ -348,41 +331,45 @@ def novo_modulo(curso_id):
     )
 
     descricao = request.form.get("descricao", "").strip()
+    ordem = validar_inteiro(
+        request.form.get("ordem", "1"),
+        1,
+        10000
+    )
 
-    ordem_texto = request.form.get("ordem", "1").strip()
-    ordem = validar_inteiro(ordem_texto, 1, 10000)
+    if titulo is None:
+        flash("Informe um título de módulo com até 120 caracteres.", "erro")
+        return redirect(url_for("visualizar_curso", curso_id=curso_id))
 
-    if titulo is None or len(descricao) > 1000 or ordem is None:
-        return redirect(url_for(
-            "visualizar_curso",
-            curso_id=curso_id
-        ))
+    if len(descricao) > 1000:
+        flash("A descrição do módulo deve ter até 1.000 caracteres.", "erro")
+        return redirect(url_for("visualizar_curso", curso_id=curso_id))
+
+    if ordem is None:
+        flash("A ordem deve ser um inteiro entre 1 e 10.000.", "erro")
+        return redirect(url_for("visualizar_curso", curso_id=curso_id))
 
     with conexao_aberta() as conexao:
-        curso = conexao.execute("""
-            SELECT id
-            FROM cursos
-            WHERE id = ?
-        """, (curso_id,)).fetchone()
+        curso = conexao.execute(
+            "SELECT id FROM cursos WHERE id = ?",
+            (curso_id,)
+        ).fetchone()
 
         if curso is None:
-            return "Curso não encontrado.", 404
+            abort(404)
 
         conexao.execute("""
-            INSERT INTO modulos (
-                curso_id,
-                titulo,
-                descricao,
-                ordem
-            )
+            INSERT INTO modulos (curso_id, titulo, descricao, ordem)
             VALUES (?, ?, ?, ?)
         """, (curso_id, titulo, descricao, ordem))
 
-    return redirect(url_for(
-        "visualizar_curso",
-        curso_id=curso_id
-    ))
+    flash("Módulo cadastrado com sucesso!", "sucesso")
+    return redirect(url_for("visualizar_curso", curso_id=curso_id))
 
+
+# ==========================================
+# EXCLUIR MÓDULO
+# ==========================================
 
 @app.route("/modulo/<int:modulo_id>/excluir", methods=["POST"])
 def excluir_modulo(modulo_id):
@@ -395,7 +382,7 @@ def excluir_modulo(modulo_id):
         """, (modulo_id,)).fetchone()
 
         if modulo is None:
-            return "Módulo não encontrado.", 404
+            abort(404)
 
         curso_id = modulo["curso_id"]
 
@@ -404,16 +391,17 @@ def excluir_modulo(modulo_id):
             WHERE id = ?
         """, (modulo_id,))
 
-    return redirect(url_for(
-        "visualizar_curso",
-        curso_id=curso_id
-    ))
+    flash("Módulo excluído com sucesso!", "sucesso")
+    return redirect(url_for("visualizar_curso", curso_id=curso_id))
 
+
+# ==========================================
+# VISUALIZAR MÓDULO E AULAS
+# ==========================================
 
 @app.route("/modulo/<int:modulo_id>")
 def visualizar_modulo(modulo_id):
     """Exibe um módulo e suas aulas."""
-
     with conexao_aberta() as conexao:
         modulo = conexao.execute("""
             SELECT
@@ -442,27 +430,46 @@ def visualizar_modulo(modulo_id):
     )
 
 
+# ==========================================
+# CADASTRAR AULA
+# ==========================================
+
 @app.route("/modulo/<int:modulo_id>/nova-aula", methods=["POST"])
 def nova_aula(modulo_id):
-    """Cadastra uma aula em um módulo."""
-
-    titulo = request.form.get("titulo", "").strip()
+    """Cadastra uma aula em um módulo existente."""
+    titulo = validar_texto(
+        request.form.get("titulo", ""),
+        200
+    )
     conteudo = request.form.get("conteudo", "").strip()
-    ordem_texto = request.form.get("ordem", "1").strip()
+    ordem = validar_inteiro(
+        request.form.get("ordem", ""),
+        1,
+        10000
+    )
 
-    if not titulo:
-        flash("Informe o título da aula.", "erro")
+    if titulo is None:
+        flash("Informe um título com até 200 caracteres.", "erro")
         return redirect(url_for(
             "visualizar_modulo",
             modulo_id=modulo_id
         ))
 
-    try:
-        ordem = int(ordem_texto)
-        if ordem < 1:
-            raise ValueError
-    except ValueError:
-        flash("A ordem da aula deve ser um número inteiro maior que zero.", "erro")
+    if len(conteudo) > 20000:
+        flash(
+            "O conteúdo da aula deve ter no máximo 20.000 caracteres.",
+            "erro"
+        )
+        return redirect(url_for(
+            "visualizar_modulo",
+            modulo_id=modulo_id
+        ))
+
+    if ordem is None:
+        flash(
+            "A ordem deve ser um número inteiro entre 1 e 10.000.",
+            "erro"
+        )
         return redirect(url_for(
             "visualizar_modulo",
             modulo_id=modulo_id
@@ -483,17 +490,19 @@ def nova_aula(modulo_id):
         """, (modulo_id, titulo, conteudo, ordem))
 
     flash("Aula cadastrada com sucesso!", "sucesso")
-
     return redirect(url_for(
         "visualizar_modulo",
         modulo_id=modulo_id
     ))
 
-    
+
+# ==========================================
+# EDITAR AULA
+# ==========================================
+
 @app.route("/aula/<int:aula_id>/editar", methods=["GET", "POST"])
 def editar_aula(aula_id):
     """Edita uma aula existente."""
-
     with conexao_aberta() as conexao:
         aula = conexao.execute("""
             SELECT
@@ -508,24 +517,27 @@ def editar_aula(aula_id):
             abort(404)
 
         if request.method == "POST":
-            titulo = request.form.get("titulo", "").strip()
+            titulo = validar_texto(
+                request.form.get("titulo", ""),
+                200
+            )
             conteudo = request.form.get("conteudo", "").strip()
-            ordem_texto = request.form.get("ordem", "1").strip()
+            ordem = validar_inteiro(
+                request.form.get("ordem", ""),
+                1,
+                10000
+            )
 
-            if not titulo:
-                flash("Informe o título da aula.", "erro")
+            if titulo is None:
+                flash("Informe um título com até 200 caracteres.", "erro")
                 return redirect(url_for(
                     "editar_aula",
                     aula_id=aula_id
                 ))
 
-            try:
-                ordem = int(ordem_texto)
-                if ordem < 1:
-                    raise ValueError
-            except ValueError:
+            if len(conteudo) > 20000:
                 flash(
-                    "A ordem deve ser um número inteiro maior que zero.",
+                    "O conteúdo da aula deve ter no máximo 20.000 caracteres.",
                     "erro"
                 )
                 return redirect(url_for(
@@ -533,16 +545,25 @@ def editar_aula(aula_id):
                     aula_id=aula_id
                 ))
 
+            if ordem is None:
+                flash(
+                    "A ordem deve ser um número inteiro entre 1 e 10.000.",
+                    "erro"
+                )
+                return redirect(url_for(
+                    "editar_aula",
+                    aula_id=aula_id
+                ))
+
+            modulo_id = aula["modulo_id"]
+
             conexao.execute("""
                 UPDATE aulas
                 SET titulo = ?, conteudo = ?, ordem = ?
                 WHERE id = ?
             """, (titulo, conteudo, ordem, aula_id))
 
-            modulo_id = aula["modulo_id"]
-
             flash("Aula atualizada com sucesso!", "sucesso")
-
             return redirect(url_for(
                 "visualizar_modulo",
                 modulo_id=modulo_id
@@ -551,10 +572,13 @@ def editar_aula(aula_id):
         return render_template("editar_aula.html", aula=aula)
 
 
+# ==========================================
+# EXCLUIR AULA
+# ==========================================
+
 @app.route("/aula/<int:aula_id>/excluir", methods=["POST"])
 def excluir_aula(aula_id):
     """Exclui uma aula existente."""
-
     with conexao_aberta() as conexao:
         aula = conexao.execute("""
             SELECT id, modulo_id
@@ -573,17 +597,19 @@ def excluir_aula(aula_id):
         """, (aula_id,))
 
     flash("Aula excluída com sucesso!", "sucesso")
-
     return redirect(url_for(
         "visualizar_modulo",
         modulo_id=modulo_id
     ))
 
 
+# ==========================================
+# CONCLUIR OU REABRIR AULA
+# ==========================================
+
 @app.route("/aula/<int:aula_id>/concluir", methods=["POST"])
 def alternar_conclusao_aula(aula_id):
-    """Marca uma aula como concluída ou reabre a aula."""
-
+    """Alterna o status de conclusão de uma aula."""
     with conexao_aberta() as conexao:
         aula = conexao.execute("""
             SELECT id, modulo_id, concluida
@@ -613,8 +639,6 @@ def alternar_conclusao_aula(aula_id):
         "visualizar_modulo",
         modulo_id=modulo_id
     ))
-
-
 
 
 # ==========================================
@@ -656,9 +680,7 @@ def inicio():
     sql += " ORDER BY id DESC"
 
     with conexao_aberta() as conexao:
-        anotacoes = conexao.execute(
-            sql, parametros
-        ).fetchall()
+        anotacoes = conexao.execute(sql, parametros).fetchall()
 
         materias = conexao.execute("""
             SELECT DISTINCT materia
@@ -696,18 +718,64 @@ def inicio():
             WHERE data_estudo = date('now', 'localtime')
         """).fetchone()[0]
 
-    if minutos_meta > 0:
-        progresso = min(
-            round(minutos_estudados / minutos_meta * 100),
-            100
-        )
-    else:
-        progresso = 0
+        total_cursos = conexao.execute(
+            "SELECT COUNT(*) FROM cursos"
+        ).fetchone()[0]
 
-    minutos_restantes = max(
-        minutos_meta - minutos_estudados,
-        0
+        total_modulos = conexao.execute(
+            "SELECT COUNT(*) FROM modulos"
+        ).fetchone()[0]
+
+        total_aulas = conexao.execute(
+            "SELECT COUNT(*) FROM aulas"
+        ).fetchone()[0]
+
+        aulas_concluidas = conexao.execute("""
+            SELECT COUNT(*)
+            FROM aulas
+            WHERE concluida = 1
+        """).fetchone()[0]
+
+        cursos_painel = conexao.execute("""
+            SELECT
+                cursos.id,
+                cursos.titulo,
+                cursos.descricao,
+                materias.nome AS materia_nome,
+                COUNT(DISTINCT modulos.id) AS total_modulos,
+                COUNT(DISTINCT aulas.id) AS total_aulas,
+                COUNT(
+                    DISTINCT CASE
+                        WHEN aulas.concluida = 1 THEN aulas.id
+                    END
+                ) AS aulas_concluidas
+            FROM cursos
+            LEFT JOIN materias
+                ON materias.id = cursos.materia_id
+            LEFT JOIN modulos
+                ON modulos.curso_id = cursos.id
+            LEFT JOIN aulas
+                ON aulas.modulo_id = modulos.id
+            GROUP BY
+                cursos.id,
+                cursos.titulo,
+                cursos.descricao,
+                materias.nome
+            ORDER BY cursos.id DESC
+            LIMIT 6
+        """).fetchall()
+
+    progresso_cursos = (
+        round(aulas_concluidas / total_aulas * 100)
+        if total_aulas > 0 else 0
     )
+
+    progresso = (
+        min(round(minutos_estudados / minutos_meta * 100), 100)
+        if minutos_meta > 0 else 0
+    )
+
+    minutos_restantes = max(minutos_meta - minutos_estudados, 0)
 
     return render_template(
         "index.html",
@@ -725,7 +793,13 @@ def inicio():
         minutos_meta=minutos_meta,
         minutos_estudados=minutos_estudados,
         progresso=progresso,
-        minutos_restantes=minutos_restantes
+        minutos_restantes=minutos_restantes,
+        total_cursos=total_cursos,
+        total_modulos=total_modulos,
+        total_aulas=total_aulas,
+        aulas_concluidas=aulas_concluidas,
+        progresso_cursos=progresso_cursos,
+        cursos_painel=cursos_painel
     )
 
 
@@ -738,7 +812,10 @@ def nova_anotacao():
     titulo = validar_texto(request.form.get("titulo", ""), 100)
     materia = validar_texto(request.form.get("materia", ""), 60)
     conteudo = validar_texto(request.form.get("conteudo", ""), 10000)
-    categoria = validar_texto(request.form.get("categoria", "Geral"), 60)
+    categoria = validar_texto(
+        request.form.get("categoria", "Geral"),
+        60
+    )
 
     if (
         titulo is None
@@ -746,6 +823,7 @@ def nova_anotacao():
         or conteudo is None
         or categoria not in CATEGORIAS
     ):
+        flash("Confira os campos da anotação e tente novamente.", "erro")
         return redirect(url_for("inicio"))
 
     with conexao_aberta() as conexao:
@@ -755,6 +833,7 @@ def nova_anotacao():
             VALUES (?, ?, ?, ?)
         """, (titulo, materia, conteudo, categoria))
 
+    flash("Anotação cadastrada com sucesso!", "sucesso")
     return redirect(url_for("inicio"))
 
 
@@ -764,22 +843,28 @@ def nova_anotacao():
 
 @app.route("/registrar-estudo", methods=["POST"])
 def registrar_estudo():
-    materia = validar_texto(request.form.get("materia", ""), 60)
+    materia = validar_texto(
+        request.form.get("materia", ""),
+        60
+    )
 
     duracao_texto = request.form.get("duracao_minutos", "")
     identificador_texto = request.form.get("identificador", "").strip()
 
     if materia not in MATERIAS_ESTUDO:
+        flash("Selecione uma matéria válida.", "erro")
         return redirect(url_for("inicio"))
 
     duracao = validar_inteiro(duracao_texto, 1, 1440)
 
     if duracao is None:
+        flash("A duração deve ser entre 1 e 1.440 minutos.", "erro")
         return redirect(url_for("inicio"))
 
     try:
         identificador = str(uuid.UUID(identificador_texto))
     except (ValueError, TypeError, AttributeError):
+        flash("Identificador da sessão inválido.", "erro")
         return redirect(url_for("inicio"))
 
     with conexao_aberta() as conexao:
@@ -790,6 +875,7 @@ def registrar_estudo():
             ON CONFLICT(identificador) DO NOTHING
         """, (materia, duracao, identificador))
 
+    flash("Sessão de estudo registrada!", "sucesso")
     return redirect(url_for("inicio"))
 
 
@@ -807,11 +893,12 @@ def editar_sessao(id):
         """, (id,)).fetchone()
 
         if sessao is None:
-            return "Sessão de estudo não encontrada.", 404
+            abort(404)
 
         if request.method == "POST":
             materia = validar_texto(
-                request.form.get("materia", ""), 60
+                request.form.get("materia", ""),
+                60
             )
 
             duracao = validar_inteiro(
@@ -825,7 +912,10 @@ def editar_sessao(id):
                     "editar_sessao.html",
                     sessao=sessao,
                     materias=MATERIAS_ESTUDO,
-                    erro="Selecione uma matéria válida e informe uma duração entre 1 e 1440 minutos."
+                    erro=(
+                        "Selecione uma matéria válida e informe "
+                        "uma duração entre 1 e 1.440 minutos."
+                    )
                 ), 400
 
             conexao.execute("""
@@ -835,6 +925,7 @@ def editar_sessao(id):
                 WHERE id = ?
             """, (materia, duracao, id))
 
+            flash("Sessão de estudo atualizada!", "sucesso")
             return redirect(url_for("historico") + "#sessoes")
 
     return render_template(
@@ -844,6 +935,10 @@ def editar_sessao(id):
         erro=None
     )
 
+
+# ==========================================
+# EXCLUIR SESSÃO DE ESTUDO
+# ==========================================
 
 @app.route("/excluir-sessao/<int:id>", methods=["POST"])
 def excluir_sessao(id):
@@ -855,13 +950,14 @@ def excluir_sessao(id):
         """, (id,)).fetchone()
 
         if sessao is None:
-            return "Sessão de estudo não encontrada.", 404
+            abort(404)
 
         conexao.execute("""
             DELETE FROM sessoes_estudo
             WHERE id = ?
         """, (id,))
 
+    flash("Sessão de estudo excluída!", "sucesso")
     return redirect(url_for("historico") + "#sessoes")
 
 
@@ -878,6 +974,7 @@ def definir_meta():
     )
 
     if minutos is None:
+        flash("A meta deve ser entre 1 e 1.440 minutos.", "erro")
         return redirect(url_for("inicio"))
 
     with conexao_aberta() as conexao:
@@ -888,6 +985,7 @@ def definir_meta():
             DO UPDATE SET minutos_meta = excluded.minutos_meta
         """, (minutos,))
 
+    flash("Meta diária atualizada!", "sucesso")
     return redirect(url_for("inicio"))
 
 
@@ -905,37 +1003,62 @@ def editar_anotacao(id):
         """, (id,)).fetchone()
 
         if anotacao is None:
-            return "Anotação não encontrada.", 404
+            abort(404)
 
         if request.method == "POST":
-            titulo = validar_texto(request.form.get("titulo", ""), 100)
-            materia = validar_texto(request.form.get("materia", ""), 60)
-            conteudo = validar_texto(request.form.get("conteudo", ""), 10000)
+            titulo = validar_texto(
+                request.form.get("titulo", ""),
+                100
+            )
+            materia = validar_texto(
+                request.form.get("materia", ""),
+                60
+            )
+            conteudo = validar_texto(
+                request.form.get("conteudo", ""),
+                10000
+            )
             categoria = validar_texto(
-                request.form.get("categoria", "Geral"), 60
+                request.form.get("categoria", ""),
+                60
             )
 
             if (
-                titulo is not None
-                and materia is not None
-                and conteudo is not None
-                and categoria in CATEGORIAS
+                titulo is None
+                or materia is None
+                or conteudo is None
+                or categoria not in CATEGORIAS
             ):
-                conexao.execute("""
-                    UPDATE anotacoes
-                    SET titulo = ?,
-                        materia = ?,
-                        conteudo = ?,
-                        categoria = ?
-                    WHERE id = ?
-                """, (titulo, materia, conteudo, categoria, id))
+                return render_template(
+                    "editar.html",
+                    anotacao=anotacao,
+                    categorias=CATEGORIAS,
+                    erro="Confira os campos e tente novamente."
+                ), 400
 
-                return redirect(url_for("inicio"))
+            conexao.execute("""
+                UPDATE anotacoes
+                SET titulo = ?,
+                    materia = ?,
+                    conteudo = ?,
+                    categoria = ?
+                WHERE id = ?
+            """, (
+                titulo,
+                materia,
+                conteudo,
+                categoria,
+                id
+            ))
+
+            flash("Anotação atualizada com sucesso!", "sucesso")
+            return redirect(url_for("inicio"))
 
     return render_template(
         "editar.html",
         anotacao=anotacao,
-        categorias=CATEGORIAS
+        categorias=CATEGORIAS,
+        erro=None
     )
 
 
@@ -946,35 +1069,52 @@ def editar_anotacao(id):
 @app.route("/excluir-anotacao/<int:id>", methods=["POST"])
 def excluir_anotacao(id):
     with conexao_aberta() as conexao:
+        anotacao = conexao.execute("""
+            SELECT id
+            FROM anotacoes
+            WHERE id = ?
+        """, (id,)).fetchone()
+
+        if anotacao is None:
+            abort(404)
+
         conexao.execute("""
             DELETE FROM anotacoes
             WHERE id = ?
         """, (id,))
 
+    flash("Anotação excluída com sucesso!", "sucesso")
     return redirect(url_for("inicio"))
 
 
 # ==========================================
-# FAVORITAR ANOTAÇÃO
+# FAVORITAR OU DESFAVORITAR ANOTAÇÃO
 # ==========================================
 
 @app.route("/favoritar-anotacao/<int:id>", methods=["POST"])
 def favoritar_anotacao(id):
     with conexao_aberta() as conexao:
         anotacao = conexao.execute("""
-            SELECT favorita
+            SELECT id, favorita
             FROM anotacoes
             WHERE id = ?
         """, (id,)).fetchone()
 
-        if anotacao is not None:
-            novo_estado = 0 if anotacao["favorita"] == 1 else 1
+        if anotacao is None:
+            abort(404)
 
-            conexao.execute("""
-                UPDATE anotacoes
-                SET favorita = ?
-                WHERE id = ?
-            """, (novo_estado, id))
+        nova_favorita = 0 if anotacao["favorita"] else 1
+
+        conexao.execute("""
+            UPDATE anotacoes
+            SET favorita = ?
+            WHERE id = ?
+        """, (nova_favorita, id))
+
+    if nova_favorita:
+        flash("Anotação adicionada aos favoritos!", "sucesso")
+    else:
+        flash("Anotação removida dos favoritos!", "sucesso")
 
     return redirect(url_for("inicio"))
 
@@ -997,77 +1137,72 @@ def historico():
             ORDER BY data_estudo DESC, id DESC
         """).fetchall()
 
-        resumo = conexao.execute("""
-            SELECT
-                COUNT(*) AS total_sessoes,
-                COALESCE(SUM(duracao_minutos), 0) AS total_minutos
+        total_minutos = conexao.execute("""
+            SELECT COALESCE(SUM(duracao_minutos), 0)
             FROM sessoes_estudo
-        """).fetchone()
+        """).fetchone()[0]
 
-        materias_estudadas = conexao.execute("""
+        total_sessoes = conexao.execute("""
+            SELECT COUNT(*)
+            FROM sessoes_estudo
+        """).fetchone()[0]
+
+        resumo_materias = conexao.execute("""
             SELECT
                 materia,
-                COUNT(*) AS total_sessoes,
+                COUNT(*) AS quantidade_sessoes,
                 SUM(duracao_minutos) AS total_minutos
             FROM sessoes_estudo
             GROUP BY materia
-            ORDER BY total_minutos DESC
+            ORDER BY total_minutos DESC, materia
         """).fetchall()
 
-        estudos_semana = conexao.execute("""
-            WITH RECURSIVE semana(data) AS (
+        ultimos_sete_dias = conexao.execute("""
+            WITH RECURSIVE dias(data) AS (
                 SELECT date('now', 'localtime', '-6 days')
-
                 UNION ALL
-
                 SELECT date(data, '+1 day')
-                FROM semana
+                FROM dias
                 WHERE data < date('now', 'localtime')
             )
             SELECT
-                semana.data AS data_estudo,
-                CASE strftime('%w', semana.data)
-                    WHEN '1' THEN 'Segunda'
-                    WHEN '2' THEN 'Terça'
-                    WHEN '3' THEN 'Quarta'
-                    WHEN '4' THEN 'Quinta'
-                    WHEN '5' THEN 'Sexta'
-                    WHEN '6' THEN 'Sábado'
-                    WHEN '0' THEN 'Domingo'
-                END AS dia_nome,
-                COALESCE(
-                    SUM(sessoes_estudo.duracao_minutos), 0
-                ) AS total_minutos
-            FROM semana
+                dias.data,
+                COALESCE(SUM(sessoes_estudo.duracao_minutos), 0)
+                    AS minutos
+            FROM dias
             LEFT JOIN sessoes_estudo
-                ON sessoes_estudo.data_estudo = semana.data
-            GROUP BY semana.data
-            ORDER BY semana.data
+                ON sessoes_estudo.data_estudo = dias.data
+            GROUP BY dias.data
+            ORDER BY dias.data
         """).fetchall()
 
     total_semana = sum(
-        dia["total_minutos"] for dia in estudos_semana
+        dia["minutos"] for dia in ultimos_sete_dias
     )
 
     media_diaria = round(total_semana / 7)
 
     maior_tempo = max(
-        (dia["total_minutos"] for dia in estudos_semana),
+        (dia["minutos"] for dia in ultimos_sete_dias),
         default=0
     )
 
-    melhor_dia = max(
-        estudos_semana,
-        key=lambda dia: dia["total_minutos"],
-        default=None
+    melhor_dia = next(
+        (
+            dia["data"]
+            for dia in ultimos_sete_dias
+            if dia["minutos"] == maior_tempo and maior_tempo > 0
+        ),
+        None
     )
 
     return render_template(
         "historico.html",
         sessoes=sessoes,
-        resumo=resumo,
-        materias_estudadas=materias_estudadas,
-        estudos_semana=estudos_semana,
+        total_minutos=total_minutos,
+        total_sessoes=total_sessoes,
+        resumo_materias=resumo_materias,
+        ultimos_sete_dias=ultimos_sete_dias,
         total_semana=total_semana,
         media_diaria=media_diaria,
         maior_tempo=maior_tempo,
@@ -1079,149 +1214,133 @@ def historico():
 # CALENDÁRIO DE ESTUDOS
 # ==========================================
 
-@app.route("/calendario")
-def calendario():
-    hoje_data = date.today()
+@app.route("/calendario", endpoint="calendario")
+def calendario_estudos():
+    hoje = date.today()
 
-    try:
-        ano = int(request.args.get("ano", hoje_data.year))
-        mes = int(request.args.get("mes", hoje_data.month))
+    ano_atual = validar_inteiro(
+        request.args.get("ano", str(hoje.year)),
+        2000,
+        2100
+    )
 
-        if not 2000 <= ano <= 2100 or not 1 <= mes <= 12:
-            raise ValueError
+    mes_atual = validar_inteiro(
+        request.args.get("mes", str(hoje.month)),
+        1,
+        12
+    )
 
-    except (ValueError, TypeError):
-        ano = hoje_data.year
-        mes = hoje_data.month
+    if ano_atual is None or mes_atual is None:
+        ano_atual = hoje.year
+        mes_atual = hoje.month
 
-    calendario_mes = calendar.Calendar(firstweekday=0)
-    semanas = calendario_mes.monthdayscalendar(ano, mes)
+    calendario = calendar.Calendar(
+        firstweekday=0
+    ).monthdayscalendar(ano_atual, mes_atual)
 
-    nomes_dias = [
-        "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"
+    nomes_meses = [
+        "Janeiro",
+        "Fevereiro",
+        "Março",
+        "Abril",
+        "Maio",
+        "Junho",
+        "Julho",
+        "Agosto",
+        "Setembro",
+        "Outubro",
+        "Novembro",
+        "Dezembro"
     ]
 
-    nome_mes = [
-        "Janeiro", "Fevereiro", "Março", "Abril",
-        "Maio", "Junho", "Julho", "Agosto",
-        "Setembro", "Outubro", "Novembro", "Dezembro"
-    ][mes - 1]
+    nome_mes = nomes_meses[mes_atual - 1]
 
-    mes_anterior_numero = mes - 1
-    ano_anterior = ano
+    if mes_atual == 1:
+        mes_anterior = 12
+        ano_anterior = ano_atual - 1
+    else:
+        mes_anterior = mes_atual - 1
+        ano_anterior = ano_atual
 
-    if mes_anterior_numero == 0:
-        mes_anterior_numero = 12
-        ano_anterior -= 1
+    if mes_atual == 12:
+        mes_proximo = 1
+        ano_proximo = ano_atual + 1
+    else:
+        mes_proximo = mes_atual + 1
+        ano_proximo = ano_atual
 
-    proximo_mes_numero = mes + 1
-    ano_proximo = ano
+    data_selecionada = request.args.get(
+        "data",
+        ""
+    ).strip()
 
-    if proximo_mes_numero == 13:
-        proximo_mes_numero = 1
-        ano_proximo += 1
+    try:
+        data_objeto = date.fromisoformat(data_selecionada)
 
-    data_selecionada = None
-    valor_data = request.args.get("data", "")
-
-    if valor_data:
-        try:
-            data_temporaria = date.fromisoformat(valor_data)
-
-            if (
-                data_temporaria.year == ano
-                and data_temporaria.month == mes
-            ):
-                data_selecionada = data_temporaria
-
-        except ValueError:
-            data_selecionada = None
+        if (
+            data_objeto.year != ano_atual
+            or data_objeto.month != mes_atual
+        ):
+            data_selecionada = ""
+    except (ValueError, TypeError):
+        data_selecionada = ""
 
     with conexao_aberta() as conexao:
-        registros = conexao.execute("""
+        registros_por_dia = conexao.execute("""
             SELECT
                 data_estudo,
                 SUM(duracao_minutos) AS minutos,
-                COUNT(*) AS sessoes
+                COUNT(*) AS quantidade_sessoes
             FROM sessoes_estudo
-            WHERE strftime('%Y-%m', data_estudo) = ?
+            WHERE strftime('%Y', data_estudo) = ?
+              AND strftime('%m', data_estudo) = ?
             GROUP BY data_estudo
-            ORDER BY data_estudo
-        """, (f"{ano:04d}-{mes:02d}",)).fetchall()
+        """, (
+            str(ano_atual),
+            f"{mes_atual:02d}"
+        )).fetchall()
 
-        sessoes_dia = []
+        sessoes_por_data = {
+            registro["data_estudo"]: {
+                "minutos": registro["minutos"],
+                "quantidade_sessoes": registro["quantidade_sessoes"]
+            }
+            for registro in registros_por_dia
+        }
+
+        sessoes_dia_selecionado = []
 
         if data_selecionada:
-            sessoes_dia = conexao.execute("""
+            sessoes_dia_selecionado = conexao.execute("""
                 SELECT
                     id,
                     materia,
                     duracao_minutos,
+                    data_estudo,
                     criado_em
                 FROM sessoes_estudo
                 WHERE data_estudo = ?
-                ORDER BY criado_em DESC, id DESC
-            """, (data_selecionada.isoformat(),)).fetchall()
-
-    registros_dias = {
-        registro["data_estudo"]: {
-            "minutos": registro["minutos"],
-            "sessoes": registro["sessoes"]
-        }
-        for registro in registros
-    }
-
-    total_mes = sum(
-        registro["minutos"] for registro in registros
-    )
-
-    dias_estudados = len(registros)
-
-    total_sessoes_mes = sum(
-        registro["sessoes"] for registro in registros
-    )
-
-    lista_dias = []
-
-    for registro in registros:
-        data_registro = date.fromisoformat(
-            registro["data_estudo"]
-        )
-
-        lista_dias.append({
-            "data_formatada": data_registro.strftime("%d/%m/%Y"),
-            "minutos": registro["minutos"],
-            "sessoes": registro["sessoes"]
-        })
+                ORDER BY id DESC
+            """, (data_selecionada,)).fetchall()
 
     return render_template(
         "calendario.html",
-        ano=ano,
-        mes=mes,
+        ano_atual=ano_atual,
+        mes_atual=mes_atual,
+        calendario=calendario,
         nome_mes=nome_mes,
-        semanas=semanas,
-        nomes_dias=nomes_dias,
-        hoje=hoje_data.isoformat(),
-        registros_dias=registros_dias,
-        total_mes=total_mes,
-        dias_estudados=dias_estudados,
-        total_sessoes_mes=total_sessoes_mes,
-        lista_dias=lista_dias,
+        mes_anterior=mes_anterior,
+        ano_anterior=ano_anterior,
+        mes_proximo=mes_proximo,
+        ano_proximo=ano_proximo,
+        sessoes_por_data=sessoes_por_data,
         data_selecionada=data_selecionada,
-        sessoes_dia=sessoes_dia,
-        mes_anterior={
-            "ano": ano_anterior,
-            "mes": mes_anterior_numero
-        },
-        proximo_mes={
-            "ano": ano_proximo,
-            "mes": proximo_mes_numero
-        }
+        sessoes_dia_selecionado=sessoes_dia_selecionado
     )
 
 
 # ==========================================
-# EXECUTAR A APLICAÇÃO
+# INICIALIZAÇÃO DO APLICATIVO
 # ==========================================
 
 if __name__ == "__main__":
