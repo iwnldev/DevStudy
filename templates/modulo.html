@@ -124,8 +124,51 @@
 
         .conteudo-aula {
             line-height: 1.8;
-            white-space: pre-wrap;
             overflow-wrap: anywhere;
+        }
+
+        .conteudo-aula h4 {
+            margin: 24px 0 8px;
+            color: #bfdbfe;
+            font-size: 1rem;
+        }
+
+        .conteudo-aula h3 {
+            margin: 0 0 14px;
+            color: #f8fafc;
+        }
+
+        .conteudo-aula p {
+            margin: 0 0 15px;
+            white-space: pre-wrap;
+        }
+
+        .resolucao-aula {
+            margin: 12px 0 18px;
+            padding: 14px;
+            border: 1px solid #475569;
+            border-radius: 8px;
+            background: #172554;
+        }
+
+        .resolucao-aula summary {
+            color: #bfdbfe;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .resolucao-aula p {
+            margin: 12px 0 0;
+        }
+
+        .adicionar-aula summary {
+            color: #bfdbfe;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .adicionar-aula[open] summary {
+            margin-bottom: 18px;
         }
 
         @media (max-width: 600px) {
@@ -161,8 +204,8 @@
             </p>
         </header>
 
-        <section class="painel">
-            <h2>Adicionar aula</h2>
+        <details class="painel adicionar-aula">
+            <summary>Adicionar uma aula própria</summary>
 
             {% with mensagens = get_flashed_messages(with_categories=true) %}
                 {% for categoria, mensagem in mensagens %}
@@ -212,17 +255,37 @@
 
                 <button type="submit">Cadastrar aula</button>
             </form>
-        </section>
+        </details>
 
         <section>
             <h2>Aulas do módulo</h2>
 
             {% if aulas %}
                 {% for aula in aulas %}
-                    <article class="aula">
+                    <article class="aula" id="aula-{{ aula.id }}">
                         <h3>{{ aula.ordem }}. {{ aula.titulo }}</h3>
 
-                        <div class="conteudo-aula">{{ aula.conteudo or 'Esta aula ainda não possui conteúdo.' }}</div>
+                        <div class="conteudo-aula">
+                            {% set blocos_aula = (aula.conteudo or 'Esta aula ainda não possui conteúdo.').split('\n\n') %}
+                            {% set estado = namespace(pular_proximo=false) %}
+                            {% for bloco in blocos_aula %}
+                                {% if estado.pular_proximo %}
+                                    {% set estado.pular_proximo = false %}
+                                {% elif bloco.startswith('## ') %}
+                                    <h3>{{ bloco[3:] }}</h3>
+                                {% elif bloco.startswith('### Gabarito') or bloco.startswith('### Resolução') %}
+                                    <details class="resolucao-aula">
+                                        <summary>{{ bloco[4:] }} — revelar</summary>
+                                        <p>{{ loop.nextitem }}</p>
+                                    </details>
+                                    {% set estado.pular_proximo = true %}
+                                {% elif bloco.startswith('### ') %}
+                                    <h4>{{ bloco[4:] }}</h4>
+                                {% else %}
+                                    <p>{{ bloco }}</p>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
 
                         
 <form

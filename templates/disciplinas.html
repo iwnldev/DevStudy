@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minhas disciplinas | DevStudy</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="pagina-disciplinas">
+    <main class="container">
+        <header class="cabecalho-disciplinas">
+            <div>
+                <p class="sobretitulo-dashboard">GRADUAÇÃO · ANÁLISE E DESENVOLVIMENTO DE SISTEMAS</p>
+                <h1>Minhas disciplinas</h1>
+                <p>Organize a grade, acompanhe aulas concluídas e continue seus estudos.</p>
+            </div>
+            <a class="botao botao-secundario" href="{{ url_for('inicio') }}">Voltar ao painel</a>
+        </header>
+
+        {% with mensagens = get_flashed_messages(with_categories=true) %}
+            {% if mensagens %}
+                <section class="mensagens-flash" aria-live="polite">
+                    {% for categoria, mensagem in mensagens %}
+                        <div class="mensagem-flash mensagem-{{ categoria }}">{{ mensagem }}</div>
+                    {% endfor %}
+                </section>
+            {% endif %}
+        {% endwith %}
+
+        <section class="resumo-disciplinas" aria-label="Resumo da grade">
+            <article><span>Disciplinas</span><strong>{{ total_disciplinas }}</strong></article>
+            <article><span>Com aulas cadastradas</span><strong>{{ total_com_conteudo }}</strong></article>
+            <article><span>Concluídas</span><strong>{{ total_concluidas }}</strong></article>
+        </section>
+
+        <section class="painel painel-filtros-disciplinas">
+            <div class="cabecalho-secao">
+                <div>
+                    <h2>Encontre uma disciplina</h2>
+                    <p>Os semestres ficam vazios até você definir sua organização curricular.</p>
+                </div>
+            </div>
+            <form method="GET" action="{{ url_for('listar_disciplinas') }}" class="filtros-disciplinas">
+                <div>
+                    <label for="pesquisa-disciplina">Pesquisar</label>
+                    <input id="pesquisa-disciplina" type="search" name="pesquisa" value="{{ pesquisa }}" placeholder="Nome da disciplina">
+                </div>
+                <div>
+                    <label for="filtro-semestre">Semestre</label>
+                    <select id="filtro-semestre" name="semestre">
+                        <option value="">Todos</option>
+                        {% for numero in range(1, 21) %}
+                            <option value="{{ numero }}" {% if semestre_selecionado == numero|string %}selected{% endif %}>{{ numero }}º semestre</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="filtro-status">Status</label>
+                    <select id="filtro-status" name="status">
+                        <option value="">Todos</option>
+                        <option value="nao_iniciada" {% if status_selecionado == 'nao_iniciada' %}selected{% endif %}>Não iniciada</option>
+                        <option value="em_andamento" {% if status_selecionado == 'em_andamento' %}selected{% endif %}>Em andamento</option>
+                        <option value="concluida" {% if status_selecionado == 'concluida' %}selected{% endif %}>Concluída</option>
+                    </select>
+                </div>
+                <button type="submit">Filtrar</button>
+                <a class="botao botao-secundario" href="{{ url_for('listar_disciplinas') }}">Limpar</a>
+            </form>
+        </section>
+
+        <section class="painel painel-nova-disciplina">
+            <details>
+                <summary>Adicionar outra disciplina</summary>
+                <form method="POST" action="{{ url_for('nova_disciplina') }}" class="form-nova-disciplina">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div>
+                        <label for="nova-disciplina-nome">Nome</label>
+                        <input id="nova-disciplina-nome" name="nome" maxlength="100" required placeholder="Nome da disciplina">
+                    </div>
+                    <div>
+                        <label for="nova-disciplina-semestre">Semestre <span>(opcional)</span></label>
+                        <select id="nova-disciplina-semestre" name="semestre">
+                            <option value="">Ainda não definido</option>
+                            {% for numero in range(1, 21) %}
+                                <option value="{{ numero }}">{{ numero }}º semestre</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label for="nova-disciplina-descricao">Descrição <span>(opcional)</span></label>
+                        <input id="nova-disciplina-descricao" name="descricao" maxlength="300" placeholder="Objetivo ou observações">
+                    </div>
+                    <button type="submit">Adicionar disciplina</button>
+                </form>
+            </details>
+        </section>
+
+        <section aria-labelledby="titulo-grade-disciplinas">
+            <div class="cabecalho-secao">
+                <div>
+                    <h2 id="titulo-grade-disciplinas">Grade curricular</h2>
+                    <p>{{ disciplinas|length }} disciplina(s) nesta visualização</p>
+                </div>
+                <a class="botao botao-secundario" href="{{ url_for('gerenciar_materias') }}">Gerenciar assuntos</a>
+            </div>
+
+            {% if disciplinas %}
+                <div class="grade-disciplinas">
+                    {% for disciplina in disciplinas %}
+                        <article class="cartao-disciplina">
+                            <div class="topo-cartao-disciplina">
+                                <div>
+                                    <p class="rotulo-semestre">{% if disciplina['semestre'] %}{{ disciplina['semestre'] }}º SEMESTRE{% else %}SEMESTRE NÃO DEFINIDO{% endif %}</p>
+                                    <h3>{{ disciplina['nome'] }}</h3>
+                                </div>
+                                <span class="status-disciplina status-{{ disciplina['status'] }}">{{ disciplina['status_label'] }}</span>
+                            </div>
+
+                            {% if disciplina['descricao'] %}
+                                <p class="descricao-disciplina">{{ disciplina['descricao'] }}</p>
+                            {% endif %}
+
+                            <div class="metricas-disciplina">
+                                <div><span>Módulos</span><strong>{{ disciplina['total_modulos'] }}</strong></div>
+                                <div><span>Aulas</span><strong>{{ disciplina['aulas_concluidas'] }} / {{ disciplina['total_aulas'] }}</strong></div>
+                                <div><span>Questões</span><strong>{{ disciplina['total_questoes'] }}</strong></div>
+                                <div><span>Tentativas</span><strong>{{ disciplina['total_tentativas'] }}</strong></div>
+                                <div><span>Materiais</span><strong>{{ disciplina['total_materiais'] }}</strong></div>
+                                <div><span>Estudo na semana</span><strong>{{ disciplina['minutos_semana'] }} min</strong></div>
+                            </div>
+                            <p class="progresso-rotulo">Progresso das aulas <strong>{{ disciplina['progresso'] }}%</strong>{% if disciplina['percentual_acerto'] is not none %}<span> · {{ disciplina['percentual_acerto'] }}% de acerto</span>{% endif %}</p>
+                            <div class="barra-progresso" role="progressbar" aria-label="Progresso em {{ disciplina['nome'] }}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ disciplina['progresso'] }}">
+                                <div class="progresso-preenchido" style="--progresso: {{ disciplina['progresso'] }}%;"></div>
+                            </div>
+
+                            {% if disciplina['revisoes_pendentes'] %}
+                                <p class="proxima-atividade"><span>Próxima atividade</span><strong>{{ disciplina['revisoes_pendentes'] }} revisão(ões) pendente(s)</strong></p>
+                            {% elif disciplina['proxima_aula'] %}
+                                <p class="proxima-atividade"><span>Próxima aula</span><strong>{{ disciplina['proxima_aula']['aula_titulo'] }}</strong></p>
+                            {% elif disciplina['total_aulas'] == 0 %}
+                                <p class="estado-sem-conteudo">Adicione conteúdo para começar a acompanhar o progresso.</p>
+                            {% else %}
+                                <p class="proxima-atividade"><span>Próxima atividade</span><strong>Todas as aulas cadastradas foram concluídas</strong></p>
+                            {% endif %}
+
+                            <form class="form-semestre-disciplina" method="POST" action="{{ url_for('definir_semestre_disciplina', materia_id=disciplina['id']) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <label for="semestre-{{ disciplina['id'] }}">Organizar semestre</label>
+                                <div>
+                                    <select id="semestre-{{ disciplina['id'] }}" name="semestre">
+                                        <option value="">Sem semestre</option>
+                                        {% for numero in range(1, 21) %}
+                                            <option value="{{ numero }}" {% if disciplina['semestre'] == numero %}selected{% endif %}>{{ numero }}º</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button class="botao-secundario" type="submit">Salvar</button>
+                                </div>
+                            </form>
+
+                            <a class="botao botao-abrir-disciplina" href="{{ url_for('visualizar_disciplina', materia_id=disciplina['id']) }}">Acessar disciplina <span aria-hidden="true">→</span></a>
+                        </article>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="painel estado-vazio-disciplinas">
+                    <h3>Nenhuma disciplina encontrada</h3>
+                    <p>Altere os filtros ou pesquise por outro nome.</p>
+                </div>
+            {% endif %}
+        </section>
+    </main>
+</body>
+</html>

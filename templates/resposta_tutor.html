@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tutor de IA | {{ disciplina_nome }} · DevStudy</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="pagina-disciplina">
+    <main class="container pagina-resposta-tutor">
+        <a class="voltar-disciplinas" href="{{ url_for('visualizar_disciplina', materia_id=materia_id) }}#tutor-ia">← Voltar para {{ disciplina_nome }}</a>
+        <section class="painel painel-tutor-ia">
+            <p class="sobretitulo-materias">TUTOR DE IA · {{ disciplina_nome }}</p>
+            <h1>Sua explicação</h1>
+            <div class="pergunta-enviada"><strong>Sua dúvida</strong><p>{{ pergunta }}</p></div>
+            <div class="resposta-ia">{{ resposta }}</div>
+            <p class="nota-privacidade-ia">Use esta resposta como apoio e confira definições, fórmulas e procedimentos com suas fontes acadêmicas.</p>
+            <a class="botao" href="{{ url_for('visualizar_disciplina', materia_id=materia_id) }}#tutor-ia">Fazer outra pergunta</a>
+        </section>
+    </main>
+</body>
+</html>

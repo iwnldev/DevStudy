@@ -23,6 +23,10 @@
         <section>
             <h2>Editar anotação</h2>
 
+            {% if erro %}
+                <p class="mensagem-erro" role="alert">{{ erro }}</p>
+            {% endif %}
+
             <form method="POST">
 
                 <!-- Token de segurança CSRF -->
@@ -63,8 +67,27 @@
                     name="materia"
                     maxlength="60"
                     value="{{ anotacao['materia'] }}"
+                    list="materias-anotacao"
                     required
                 >
+
+                <datalist id="materias-anotacao">
+                    {% for assunto in assuntos_disponiveis|unique(attribute='materia') %}
+                        <option value="{{ assunto['materia'] }}"></option>
+                    {% endfor %}
+                </datalist>
+
+                <label for="assunto-edicao">Assunto <span>(opcional)</span></label>
+                <select id="assunto-edicao" name="assunto_id">
+                    <option value="">Sem assunto específico</option>
+                    {% for assunto in assuntos_disponiveis %}
+                        <option
+                            value="{{ assunto['id'] }}"
+                            data-materia="{{ assunto['materia'] }}"
+                            {% if anotacao['assunto_id'] == assunto['id'] %}selected{% endif %}
+                        >{{ assunto['materia'] }} · {{ assunto['nome'] }}</option>
+                    {% endfor %}
+                </select>
 
                 <label for="conteudo">Conteúdo</label>
                 <textarea
@@ -87,5 +110,22 @@
     <footer>
         <p>DevStudy — Aprender, praticar e evoluir.</p>
     </footer>
+    <script>
+        const materiaNota = document.getElementById("materia");
+        const assuntoNota = document.getElementById("assunto-edicao");
+        function filtrarAssuntos() {
+            const nomeMateria = materiaNota.value.trim().normalize("NFC").toLocaleLowerCase("pt-BR");
+            Array.from(assuntoNota.options).forEach((opcao) => {
+                if (!opcao.value) return;
+                const nomeAssociado = (opcao.dataset.materia || "").trim().normalize("NFC").toLocaleLowerCase("pt-BR");
+                const disponivel = nomeMateria !== "" && nomeAssociado === nomeMateria;
+                opcao.hidden = !disponivel;
+                opcao.disabled = !disponivel;
+                if (!disponivel && opcao.selected) assuntoNota.value = "";
+            });
+        }
+        materiaNota.addEventListener("input", filtrarAssuntos);
+        filtrarAssuntos();
+    </script>
 </body>
 </html>

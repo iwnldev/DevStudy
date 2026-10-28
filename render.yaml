@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: devstudy
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --workers 2 --bind 0.0.0.0:$PORT
+    healthCheckPath: /health
+    disk:
+      name: devstudy-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: DEVSTUDY_DATA_DIR
+        value: /var/data
+      - key: DEVSTUDY_COOKIE_SECURE
+        value: "1"
+      - key: DEVSTUDY_SECRET_KEY
+        generateValue: true
+      - key: DEVSTUDY_PUBLIC_URL
+        sync: false
+      - key: DEVSTUDY_MAIL_SERVER
+        sync: false
+      - key: DEVSTUDY_MAIL_PORT
+        value: "587"
+      - key: DEVSTUDY_MAIL_USERNAME
+        sync: false
+      - key: DEVSTUDY_MAIL_PASSWORD
+        sync: false
+      - key: DEVSTUDY_MAIL_FROM
+        sync: false
+      - key: DEVSTUDY_MAIL_USE_SSL
+        value: "0"

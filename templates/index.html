@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>DevStudy | Minha biblioteca de estudos</title>
+    <title>DevStudy | Painel de estudos</title>
 
     <link
         rel="stylesheet"
@@ -15,8 +15,6 @@
 
 <body>
 
-    <!-- Cabeçalho -->
-    
 <!-- Estrutura do dashboard -->
 <div class="estrutura-dashboard">
 
@@ -54,15 +52,25 @@
                 Biblioteca
             </a>
 
+            <a href="#progresso-cursos">
+                <span aria-hidden="true">▣</span>
+                Trilhas de estudo
+            </a>
+
+            <a href="{{ url_for('listar_disciplinas') }}">
+                <span aria-hidden="true">▦</span>
+                Minhas disciplinas
+            </a>
+
+            <a href="#metas-materias">
+                <span aria-hidden="true">◎</span>
+                Metas semanais
+            </a>
+
             <a href="{{ url_for('historico') }}">
                 <span aria-hidden="true">↗</span>
                 Histórico de estudos
             </a>
-
-            <a href="{{ url_for('listar_cursos') }}">
-    <span aria-hidden="true">📚</span>
-    Meus cursos
-</a>
 
             <a href="{{ url_for('calendario') }}">
                 <span aria-hidden="true">📅</span>
@@ -72,7 +80,8 @@
 
         <div class="lateral-rodape">
             <span class="indicador-status" aria-hidden="true"></span>
-            <span>Seu espaço de evolução</span>
+            <span>{{ session.get('usuario_nome', 'Seu espaço de evolução') }}</span>
+            {% if session.get('usuario_id') %}<form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit">Sair</button></form>{% endif %}
         </div>
     </aside>
 
@@ -89,740 +98,856 @@
             </a>
         </header>
 
-    <main>
+        <main>
 
-        <!-- Mensagens de feedback do Flask -->
-        {% with mensagens = get_flashed_messages(with_categories=true) %}
-            {% if mensagens %}
-                <section class="mensagens-flash" aria-live="polite">
-                    {% for categoria, mensagem in mensagens %}
-                        <div class="mensagem-flash mensagem-{{ categoria }}">
-                            {{ mensagem }}
+            <!-- Mensagens de feedback do Flask -->
+            {% with mensagens = get_flashed_messages(with_categories=true) %}
+                {% if mensagens %}
+                    <section class="mensagens-flash" aria-live="polite">
+                        {% for categoria, mensagem in mensagens %}
+                            <div class="mensagem-flash mensagem-{{ categoria }}">
+                                {{ mensagem }}
+                            </div>
+                        {% endfor %}
+                    </section>
+                {% endif %}
+            {% endwith %}
+
+            <!-- Atalho para retomar o curso em andamento -->
+            <section class="retomar-estudos" aria-labelledby="titulo-retomar-estudos">
+                <div class="retomar-icone" aria-hidden="true">▶</div>
+                <div class="retomar-conteudo">
+                    <p class="sobretitulo-dashboard">SEU PRÓXIMO PASSO</p>
+                    {% if proxima_aula %}
+                        <h2 id="titulo-retomar-estudos">Continue de onde parou</h2>
+                        <p>{{ proxima_aula['curso_titulo'] }} <span aria-hidden="true">·</span> {{ proxima_aula['modulo_titulo'] }}</p>
+                        <strong>{{ proxima_aula['aula_titulo'] }}</strong>
+                        {% set link_proxima_aula = url_for('visualizar_modulo', modulo_id=proxima_aula['modulo_id']) ~ '#aula-' ~ proxima_aula['aula_id'] %}
+                        <a class="botao-retomar" href="{{ link_proxima_aula }}">Continuar aula <span aria-hidden="true">→</span></a>
+                    {% elif total_aulas > 0 %}
+                        <h2 id="titulo-retomar-estudos">Você concluiu todas as aulas!</h2>
+                        <p>Que tal revisar um curso ou adicionar uma nova aula à sua trilha?</p>
+                        <a class="botao-retomar" href="{{ url_for('listar_cursos') }}">Ver meus cursos <span aria-hidden="true">→</span></a>
+                    {% else %}
+                        <h2 id="titulo-retomar-estudos">Prepare sua próxima aula</h2>
+                        <p>Organize um curso com módulos e aulas para acompanhar sua evolução.</p>
+                        <a class="botao-retomar" href="{{ url_for('listar_cursos') }}">Explorar cursos <span aria-hidden="true">→</span></a>
+                    {% endif %}
+                </div>
+            </section>
+
+            <!-- Estatísticas da biblioteca -->
+            <section class="painel-estatisticas" id="painel">
+
+                <article class="cartao-estatistica">
+                    <span>Total de anotações</span>
+                    <strong>{{ total_anotacoes }}</strong>
+                </article>
+
+                <article class="cartao-estatistica">
+                    <span>Matérias cadastradas</span>
+                    <strong>{{ total_materias }}</strong>
+                </article>
+
+                <article class="cartao-estatistica">
+                    <span>Anotações favoritas</span>
+                    <strong>{{ total_favoritas }}</strong>
+                </article>
+
+                <article class="cartao-estatistica">
+                    <span>Categorias utilizadas</span>
+                    <strong>{{ total_categorias }}</strong>
+                </article>
+
+            </section>
+
+            <!-- Resumo da atividade nos últimos sete dias -->
+            <section class="resumo-semanal" aria-labelledby="titulo-resumo-semanal">
+                <div class="cabecalho-resumo-semanal">
+                    <div>
+                        <p class="sobretitulo-dashboard">CONSTÂNCIA</p>
+                        <h2 id="titulo-resumo-semanal">Sua semana de estudos</h2>
+                    </div>
+                    <a href="{{ url_for('historico') }}">Ver histórico <span aria-hidden="true">→</span></a>
+                </div>
+
+                <div class="metricas-semana">
+                    <div><strong>{{ minutos_semana // 60 }}h {{ minutos_semana % 60 }}min</strong><span>estudados nos últimos 7 dias</span></div>
+                    <div><strong>{{ dias_ativos_semana }} de 7</strong><span>dias com atividade</span></div>
+                </div>
+
+                <div class="grafico-semanal" role="img" aria-label="Minutos de estudo por dia nos últimos sete dias">
+                    {% for dia in estudo_semana %}
+                        <div class="coluna-dia-semana" aria-label="{{ dia['rotulo'] }}: {{ dia['minutos'] }} minutos">
+                            <span class="valor-dia-semana">{% if dia['minutos'] %}{{ dia['minutos'] }}{% else %}—{% endif %}</span>
+                            <div class="trilho-dia-semana"><span style="height: {{ dia['percentual'] }}%"></span></div>
+                            <span class="rotulo-dia-semana">{{ dia['rotulo'] }}</span>
                         </div>
                     {% endfor %}
-                </section>
-            {% endif %}
-        {% endwith %}
+                </div>
 
-        <!-- Estatísticas da biblioteca -->
-        <section class="painel-estatisticas" id="painel">
-
-            <article class="cartao-estatistica">
-                <span>Total de anotações</span>
-                <strong>{{ total_anotacoes }}</strong>
-            </article>
-
-            <article class="cartao-estatistica">
-                <span>Matérias cadastradas</span>
-                <strong>{{ total_materias }}</strong>
-            </article>
-
-            <article class="cartao-estatistica">
-                <span>Anotações favoritas</span>
-                <strong>{{ total_favoritas }}</strong>
-            </article>
-
-            <article class="cartao-estatistica">
-                <span>Categorias utilizadas</span>
-                <strong>{{ total_categorias }}</strong>
-            </article>
-
-        </section>
-
-        
-<!-- Resumo dos cursos e do progresso de aprendizagem -->
-<section class="secao-cursos-painel" id="progresso-cursos">
-
-    <div class="cabecalho-secao-cursos">
-        <div>
-            <h2>📚 Meus cursos</h2>
-            <p>Acompanhe sua evolução nos conteúdos cadastrados.</p>
-        </div>
-
-        <a href="{{ url_for('listar_cursos') }}">
-            Gerenciar cursos →
-        </a>
-    </div>
-
-    <div class="estatisticas-cursos">
-
-        <article class="cartao-estatistica">
-            <span>Cursos</span>
-            <strong>{{ total_cursos }}</strong>
-        </article>
-
-        <article class="cartao-estatistica">
-            <span>Módulos</span>
-            <strong>{{ total_modulos }}</strong>
-        </article>
-
-        <article class="cartao-estatistica">
-            <span>Total de aulas</span>
-            <strong>{{ total_aulas }}</strong>
-        </article>
-
-        <article class="cartao-estatistica">
-            <span>Aulas concluídas</span>
-            <strong>{{ aulas_concluidas }}</strong>
-        </article>
-
-    </div>
-
-    <div class="resumo-progresso-cursos">
-        <div class="cabecalho-progresso-cursos">
-            <span>Progresso geral das aulas</span>
-            <strong>{{ progresso_cursos }}%</strong>
-        </div>
-
-        <div
-            class="barra-progresso"
-            role="progressbar"
-            aria-label="Progresso geral dos cursos"
-            aria-valuemin="0"
-            aria-valuemax="100"
-            aria-valuenow="{{ progresso_cursos }}"
-        >
-            <div
-                class="progresso-preenchido"
-                style="--progresso: {{ progresso_cursos }}%;"
-            ></div>
-        </div>
-    </div>
-
-    <div class="lista-cursos-painel">
-
-        {% if cursos_painel %}
-
-            {% for curso in cursos_painel %}
-
-                <article class="cartao-curso-painel">
-
-                    <div class="informacoes-curso-painel">
-                        <h3>{{ curso["titulo"] }}</h3>
-
-                        {% if curso["materia_nome"] %}
-                            <p>{{ curso["materia_nome"] }}</p>
+                <div class="tendencia-semanal">
+                    <article class="cartao-tendencia-semanal">
+                        <span class="rotulo-tendencia">Esta semana até hoje</span>
+                        <strong>{{ minutos_semana_atual // 60 }}h {{ minutos_semana_atual % 60 }}min</strong>
+                        <span class="comparacao-tendencia">Mesmo período na semana passada: {{ minutos_semana_anterior // 60 }}h {{ minutos_semana_anterior % 60 }}min</span>
+                        {% if minutos_semana_anterior > 0 %}
+                            <p class="variacao-semanal {% if diferenca_semanal > 0 %}variacao-alta{% elif diferenca_semanal < 0 %}variacao-queda{% else %}variacao-estavel{% endif %}">
+                                {% if diferenca_semanal > 0 %}↑{% elif diferenca_semanal < 0 %}↓{% else %}→{% endif %}
+                                {{ diferenca_semanal|abs }} min ({{ variacao_semanal|abs }}%)
+                                {% if diferenca_semanal > 0 %}a mais{% elif diferenca_semanal < 0 %}a menos{% else %}sem alteração{% endif %}
+                            </p>
+                        {% elif minutos_semana_atual > 0 %}
+                            <p class="variacao-semanal variacao-alta">Você já registrou {{ minutos_semana_atual }} min nesta semana.</p>
                         {% else %}
-                            <p>Sem matéria associada</p>
+                            <p class="variacao-semanal variacao-estavel">Nenhuma sessão registrada neste período.</p>
                         {% endif %}
+                    </article>
 
-                        <span>
-                            {{ curso["total_modulos"] }} módulo(s)
-                            ·
-                            {{ curso["aulas_concluidas"] }}
-                            de
-                            {{ curso["total_aulas"] }} aula(s) concluída(s)
-                        </span>
+                    <article class="cartao-tendencia-semanal materia-destaque">
+                        <span class="rotulo-tendencia">Matéria em destaque</span>
+                        {% if materia_destaque_semana %}
+                            <strong>{{ materia_destaque_semana['materia'] }}</strong>
+                            <span class="comparacao-tendencia">{{ materia_destaque_semana['minutos'] // 60 }}h {{ materia_destaque_semana['minutos'] % 60 }}min estudados nesta semana</span>
+                        {% else %}
+                            <strong>Sem dados ainda</strong>
+                            <span class="comparacao-tendencia">Registre uma sessão para ver sua matéria em destaque.</span>
+                        {% endif %}
+                    </article>
+                </div>
+            </section>
+
+            <!-- Metas semanais e progresso por matéria -->
+            <section class="metas-materias" id="metas-materias" aria-labelledby="titulo-metas-materias">
+                <div class="cabecalho-metas-materias">
+                    <div>
+                        <p class="sobretitulo-dashboard">PLANEJAMENTO</p>
+                        <h2 id="titulo-metas-materias">Metas semanais por matéria</h2>
+                        <p>Defina seu foco e acompanhe o tempo estudado nos últimos sete dias.</p>
+                    </div>
+                </div>
+
+                {% if progresso_metas_materias %}
+                    <div class="grade-metas-materias">
+                        {% for item in progresso_metas_materias %}
+                            <article class="cartao-meta-materia">
+                                <h3>{{ item['nome'] }}</h3>
+
+                                {% if item['minutos_meta'] > 0 %}
+                                    <div class="detalhe-meta-materia">
+                                        <span>{{ item['minutos_estudados'] }} de {{ item['minutos_meta'] }} min</span>
+                                        <strong>{{ item['progresso'] }}%</strong>
+                                    </div>
+                                    <div class="barra-meta-materia" role="progressbar" aria-label="Progresso da meta semanal de {{ item['nome'] }}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ item['progresso'] }}">
+                                        <span style="width: {{ item['progresso'] }}%"></span>
+                                    </div>
+                                    {% if item['minutos_restantes'] > 0 %}
+                                        <p class="texto-meta-materia">Faltam {{ item['minutos_restantes'] }} min para atingir a meta.</p>
+                                    {% else %}
+                                        <p class="texto-meta-materia meta-concluida">Meta semanal concluída!</p>
+                                    {% endif %}
+                                {% else %}
+                                    <p class="texto-meta-materia">Nenhuma meta definida para esta matéria.</p>
+                                {% endif %}
+
+                                <form action="{{ url_for('definir_meta_semanal') }}" method="POST" class="form-meta-materia">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="materia_id" value="{{ item['id'] }}">
+                                    <label for="meta-semanal-{{ item['id'] }}">Meta semanal (minutos)</label>
+                                    <div class="campos-meta-materia">
+                                        <input type="number" id="meta-semanal-{{ item['id'] }}" name="minutos_meta" min="0" max="10080" value="{{ item['minutos_meta'] if item['minutos_meta'] else '' }}" placeholder="Ex.: 180" required>
+                                        <button type="submit">Salvar</button>
+                                    </div>
+                                    <small>De 1 a 10.080 min; informe 0 para remover a meta.</small>
+                                </form>
+                            </article>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="estado-vazio-metas">Cadastre uma matéria para começar a definir metas semanais.</p>
+                {% endif %}
+            </section>
+
+            <!-- Resumo dos cursos e progresso de aprendizagem -->
+            <section class="secao-cursos-painel" id="progresso-cursos">
+                <div class="cabecalho-secao-cursos">
+                    <div>
+                        <p class="sobretitulo-dashboard">TRILHA DE APRENDIZADO</p>
+                        <h2>Trilhas de estudo por disciplina</h2>
+                        <p>Acompanhe suas aulas e continue de onde parou.</p>
+                    </div>
+                    <a class="atalho-cursos" href="{{ url_for('listar_cursos') }}">
+                        Gerenciar cursos <span aria-hidden="true">→</span>
+                    </a>
+                </div>
+
+                <div class="resumo-cursos" aria-label="Resumo dos cursos">
+                    <span><strong>{{ total_cursos }}</strong> trilhas</span>
+                    <span><strong>{{ total_modulos }}</strong> módulos</span>
+                    <span><strong>{{ aulas_concluidas }}</strong> de {{ total_aulas }} aulas concluídas</span>
+                    <span><strong>{{ progresso_cursos }}%</strong> de progresso</span>
+                </div>
+
+                {% if cursos_painel %}
+                    <div class="grade-cursos-painel">
+                        {% for curso in cursos_painel %}
+                            {% set percentual_curso = (curso['aulas_concluidas'] / curso['total_aulas'] * 100)|round|int if curso['total_aulas'] else 0 %}
+                            <article class="cartao-curso-painel">
+                                <div class="curso-painel-topo">
+                                    <span class="curso-etiqueta">{{ curso['materia_nome'] or 'Curso livre' }}</span>
+                                    <span>{{ curso['total_modulos'] }} módulos</span>
+                                </div>
+                                <h3>{{ curso['titulo'] }}</h3>
+                                <p>{{ curso['descricao'] or 'Continue avançando no seu ritmo.' }}</p>
+                                <div class="curso-progresso-texto">
+                                    <span>{{ curso['aulas_concluidas'] }} de {{ curso['total_aulas'] }} aulas</span>
+                                    <strong>{{ percentual_curso }}%</strong>
+                                </div>
+                                <div class="curso-barra-progresso" role="progressbar" aria-label="Progresso de {{ curso['titulo'] }}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ percentual_curso }}">
+                                    <span style="width: {{ percentual_curso }}%"></span>
+                                </div>
+                                <a href="{{ url_for('visualizar_curso', curso_id=curso['id']) }}">Abrir curso <span aria-hidden="true">→</span></a>
+                            </article>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="estado-vazio-cursos">
+                        <span aria-hidden="true">▣</span>
+                        <div>
+                            <h3>Monte sua primeira trilha de estudos</h3>
+                            <p>Organize cursos em módulos e acompanhe cada aula concluída.</p>
+                        </div>
+                        <a href="{{ url_for('listar_cursos') }}">Criar curso</a>
+                    </div>
+                {% endif %}
+            </section>
+
+            <!-- Cronômetro Pomodoro -->
+            <section class="pomodoro" id="pomodoro">
+
+                <h2>🍅 Foco Pomodoro</h2>
+
+                <p>Escolha uma matéria e concentre-se nos estudos.</p>
+
+                <form
+                    id="form-pomodoro"
+                    action="{{ url_for('registrar_estudo') }}"
+                    method="POST"
+                >
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                    <input
+                        type="hidden"
+                        name="identificador"
+                        id="identificador-sessao"
+                    >
+
+                    <label for="materia-pomodoro">Matéria de estudo</label>
+
+                    <select id="materia-pomodoro" name="materia" required>
+                        {% for materia in materias_cadastradas %}
+                            <option value="{{ materia }}">{{ materia }}</option>
+                        {% endfor %}
+                    </select>
+
+                    <input
+                        type="hidden"
+                        name="duracao_minutos"
+                        value="25"
+                    >
+
+                    <div
+                        id="visor-pomodoro"
+                        class="visor-pomodoro"
+                        role="timer"
+                        aria-live="off"
+                    >
+                        25:00
                     </div>
 
-                    <div class="progresso-individual-curso">
+                    <div class="botoes-pomodoro">
 
-                        {% if curso["total_aulas"] > 0 %}
-                            {% set percentual = (
-                                curso["aulas_concluidas"]
-                                / curso["total_aulas"] * 100
-                            ) | round | int %}
-                        {% else %}
-                            {% set percentual = 0 %}
-                        {% endif %}
-
-                        <div class="cabecalho-progresso-cursos">
-                            <span>Progresso</span>
-                            <strong>{{ percentual }}%</strong>
-                        </div>
-
-                        <div
-                            class="barra-progresso"
-                            role="progressbar"
-                            aria-label="Progresso do curso {{ curso['titulo'] }}"
-                            aria-valuemin="0"
-                            aria-valuemax="100"
-                            aria-valuenow="{{ percentual }}"
+                        <button
+                            type="button"
+                            id="botao-iniciar-pomodoro"
+                            onclick="iniciarPomodoro()"
                         >
-                            <div
-                                class="progresso-preenchido"
-                                style="--progresso: {{ percentual }}%;"
-                            ></div>
-                        </div>
+                            Iniciar
+                        </button>
 
-                        <a href="{{ url_for(
-                            'visualizar_curso',
-                            curso_id=curso['id']
-                        ) }}">
-                            Continuar estudando →
+                        <button
+                            type="button"
+                            id="botao-pausar-pomodoro"
+                            onclick="pausarPomodoro()"
+                        >
+                            Pausar
+                        </button>
+
+                        <button
+                            type="button"
+                            id="botao-reiniciar-pomodoro"
+                            onclick="reiniciarPomodoro()"
+                        >
+                            Reiniciar
+                        </button>
+
+                    </div>
+
+                </form>
+
+                <p
+                    id="status-pomodoro"
+                    class="dica-pomodoro"
+                    aria-live="polite"
+                >
+                    Pronto para começar?
+                </p>
+
+            </section>
+
+            <!-- Meta diária e registro manual -->
+            <section class="secao-meta" id="meta">
+
+                <h2>Minha meta diária</h2>
+
+                <p>Defina seu objetivo e acompanhe seu progresso de hoje.</p>
+
+                <div class="resumo-meta">
+
+                    <div>
+                        <span>Meta diária</span>
+                        <strong>{{ minutos_meta }} min</strong>
+                    </div>
+
+                    <div>
+                        <span>Estudado hoje</span>
+                        <strong>{{ minutos_estudados }} min</strong>
+                    </div>
+
+                    <div>
+                        <span>Faltam</span>
+                        <strong>{{ minutos_restantes }} min</strong>
+                    </div>
+
+                </div>
+
+                <div
+                    class="barra-progresso"
+                    role="progressbar"
+                    aria-label="Progresso da meta diária"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                    aria-valuenow="{{ progresso }}"
+                >
+                    <div
+                        class="progresso-preenchido"
+                        style="--progresso: {{ progresso }}%;"
+                    ></div>
+                </div>
+
+                <p class="texto-progresso">
+                    {{ progresso }}% da meta concluída hoje
+                </p>
+
+                {% if minutos_estudados >= minutos_meta %}
+                    <p class="mensagem-meta">
+                        Parabéns! Você alcançou sua meta diária!
+                    </p>
+                {% endif %}
+
+                <!-- Alterar meta diária -->
+                <form
+                    action="{{ url_for('definir_meta') }}"
+                    method="POST"
+                >
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                    <h3>Alterar meta diária</h3>
+
+                    <label for="minutos_meta">
+                        Quantos minutos deseja estudar por dia?
+                    </label>
+
+                    <input
+                        type="number"
+                        id="minutos_meta"
+                        name="minutos_meta"
+                        min="1"
+                        max="1440"
+                        value="{{ minutos_meta }}"
+                        required
+                    >
+
+                    <button type="submit">Salvar meta</button>
+
+                </form>
+
+                <!-- Registro manual de estudo -->
+                <form
+                    id="form-registro-manual"
+                    action="{{ url_for('registrar_estudo') }}"
+                    method="POST"
+                    onsubmit="return prepararRegistroManual(this);"
+                >
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                    <h3>Registrar sessão de estudo</h3>
+
+                    <input
+                        type="hidden"
+                        name="identificador"
+                        class="identificador-manual"
+                    >
+
+                    <label for="materia-estudo">Matéria estudada</label>
+
+                    <select id="materia-estudo" name="materia" required>
+                        {% for materia in materias_cadastradas %}
+                            <option value="{{ materia }}">{{ materia }}</option>
+                        {% endfor %}
+                    </select>
+
+                    <label for="duracao_minutos">Duração em minutos</label>
+
+                    <input
+                        type="number"
+                        id="duracao_minutos"
+                        name="duracao_minutos"
+                        min="1"
+                        max="1440"
+                        placeholder="Ex.: 30"
+                        required
+                    >
+
+                    <button type="submit">Registrar estudo</button>
+
+                </form>
+
+            </section>
+
+            <!-- Cadastro de anotações -->
+            <section id="nova-anotacao">
+
+                <h2>Nova anotação</h2>
+
+                <p>Registre conceitos, comandos, resumos e aprendizados.</p>
+
+                <form
+                    action="{{ url_for('nova_anotacao') }}"
+                    method="POST"
+                >
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                    <label for="titulo">Título da anotação</label>
+
+                    <input
+                        type="text"
+                        id="titulo"
+                        name="titulo"
+                        maxlength="150"
+                        placeholder="Ex.: O que é uma variável?"
+                        required
+                    >
+
+                    <label for="categoria">Categoria de estudo</label>
+
+                    <select id="categoria" name="categoria" required>
+                        {% for categoria in categorias %}
+                            <option value="{{ categoria }}">
+                                {{ categoria }}
+                            </option>
+                        {% endfor %}
+                    </select>
+
+                    <label for="materia">Matéria ou tecnologia</label>
+
+                    <input
+                        type="text"
+                        id="materia"
+                        name="materia"
+                        maxlength="100"
+                        placeholder="Ex.: Python, SQL, Matemática..."
+                        list="materias-anotacao"
+                        required
+                    >
+
+                    <datalist id="materias-anotacao">
+                        {% for materia in materias_cadastradas %}
+                            <option value="{{ materia }}"></option>
+                        {% endfor %}
+                    </datalist>
+
+                    <label for="assunto-anotacao">Assunto <span>(opcional)</span></label>
+                    <select id="assunto-anotacao" name="assunto_id">
+                        <option value="">Sem assunto específico</option>
+                        {% for assunto in assuntos_disponiveis %}
+                            <option value="{{ assunto['id'] }}" data-materia="{{ assunto['materia'] }}">
+                                {{ assunto['materia'] }} · {{ assunto['nome'] }}
+                            </option>
+                        {% endfor %}
+                    </select>
+
+                    <label for="conteudo">Conteúdo da anotação</label>
+
+                    <textarea
+                        id="conteudo"
+                        name="conteudo"
+                        rows="6"
+                        maxlength="20000"
+                        placeholder="Escreva aqui o que você aprendeu..."
+                        required
+                    ></textarea>
+
+                    <button type="submit">Salvar anotação</button>
+
+                </form>
+
+            </section>
+
+            <!-- Biblioteca de anotações -->
+            <section id="biblioteca">
+
+                <h2>Minha biblioteca</h2>
+
+                <p>Consulte, pesquise e filtre seus aprendizados.</p>
+
+                <div class="acoes-exportacao" aria-label="Exportar dados do DevStudy">
+                    <a class="botao-exportacao" href="{{ url_for('exportar_anotacoes') }}" download>
+                        Baixar anotações CSV <span aria-hidden="true">↓</span>
+                    </a>
+                    <a class="botao-exportacao botao-exportacao-secundario" href="{{ url_for('exportar_sessoes') }}" download>
+                        Baixar histórico CSV <span aria-hidden="true">↓</span>
+                    </a>
+                </div>
+
+                <!-- Pesquisa e filtros: GET não precisa de token CSRF -->
+                <form
+                    action="{{ url_for('inicio') }}"
+                    method="GET"
+                    class="form-pesquisa"
+                >
+
+                    <label for="pesquisa">Pesquisar anotações</label>
+
+                    <input
+                        type="search"
+                        id="pesquisa"
+                        name="pesquisa"
+                        placeholder="Título, conceito ou tecnologia..."
+                        value="{{ pesquisa }}"
+                    >
+
+                    <label for="materia-filtro">Filtrar por matéria</label>
+
+                    <select id="materia-filtro" name="materia">
+
+                        <option value="">Todas as matérias</option>
+
+                        {% for item in materias %}
+                            <option
+                                value="{{ item['materia'] }}"
+                                {% if materia_selecionada == item['materia'] %}
+                                    selected
+                                {% endif %}
+                            >
+                                {{ item['materia'] }}
+                            </option>
+                        {% endfor %}
+
+                    </select>
+
+                    <label for="categoria-filtro">Filtrar por categoria</label>
+
+                    <select id="categoria-filtro" name="categoria">
+
+                        <option value="">Todas as categorias</option>
+
+                        {% for categoria in categorias %}
+                            <option
+                                value="{{ categoria }}"
+                                {% if categoria_selecionada == categoria %}
+                                    selected
+                                {% endif %}
+                            >
+                                {{ categoria }}
+                            </option>
+                        {% endfor %}
+
+                    </select>
+
+                    <label for="favoritas">Exibir favoritos</label>
+
+                    <select id="favoritas" name="favoritas">
+
+                        <option
+                            value=""
+                            {% if not somente_favoritas %}selected{% endif %}
+                        >
+                            Todas as anotações
+                        </option>
+
+                        <option
+                            value="1"
+                            {% if somente_favoritas %}selected{% endif %}
+                        >
+                            Somente favoritas
+                        </option>
+
+                    </select>
+
+                    <label for="ordenar">Ordenar resultados</label>
+
+                    <select id="ordenar" name="ordenar">
+                        <option value="recentes" {% if ordenacao == 'recentes' %}selected{% endif %}>
+                            Mais recentes
+                        </option>
+                        <option value="antigas" {% if ordenacao == 'antigas' %}selected{% endif %}>
+                            Mais antigas
+                        </option>
+                        <option value="titulo_az" {% if ordenacao == 'titulo_az' %}selected{% endif %}>
+                            Título: A–Z
+                        </option>
+                        <option value="titulo_za" {% if ordenacao == 'titulo_za' %}selected{% endif %}>
+                            Título: Z–A
+                        </option>
+                        <option value="favoritas" {% if ordenacao == 'favoritas' %}selected{% endif %}>
+                            Favoritas primeiro
+                        </option>
+                    </select>
+
+                    <div class="acoes-pesquisa">
+
+                        <button type="submit">Pesquisar</button>
+
+                        <a href="{{ url_for('inicio') }}">
+                            Limpar filtros
                         </a>
 
                     </div>
 
-                </article>
+                </form>
 
-            {% endfor %}
-
-        {% else %}
-
-            <div class="estado-vazio-cursos">
-                <h3>Você ainda não cadastrou cursos</h3>
-                <p>
-                    Organize seus estudos criando cursos, módulos e aulas.
+                <p class="contagem-resultados" aria-live="polite">
+                    <strong>{{ anotacoes|length }}</strong>
+                    {% if anotacoes|length == 1 %}
+                        anotação encontrada
+                    {% else %}
+                        anotações encontradas
+                    {% endif %}
                 </p>
-                <a href="{{ url_for('listar_cursos') }}">
-                    Criar meu primeiro curso
-                </a>
-            </div>
 
-        {% endif %}
+                <!-- Resultados da biblioteca -->
+                {% if anotacoes %}
 
-    </div>
+                    {% for anotacao in anotacoes %}
 
-</section>
+                        <article class="cartao-anotacao">
 
+                            <h3>{{ anotacao["titulo"] }}</h3>
 
-        <!-- Cronômetro Pomodoro -->
-        <section class="pomodoro" id="pomodoro">
+                            <p class="linha-categoria">
+                                <span class="etiqueta-categoria">
+                                    {{ anotacao["categoria"] }}
+                                </span>
+                            </p>
 
-            <h2>🍅 Foco Pomodoro</h2>
+                            <p>
+                                <strong>Matéria:</strong>
+                                {{ anotacao["materia"] }}
+                            </p>
 
-            <p>Escolha uma matéria e concentre-se nos estudos.</p>
-
-            <form
-                id="form-pomodoro"
-                action="{{ url_for('registrar_estudo') }}"
-                method="POST"
-            >
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-                <input
-                    type="hidden"
-                    name="identificador"
-                    id="identificador-sessao"
-                >
-
-                <label for="materia-pomodoro">Matéria de estudo</label>
-
-                <select id="materia-pomodoro" name="materia" required>
-                    <option value="Python">Python</option>
-                    <option value="JavaScript">JavaScript</option>
-                    <option value="Banco de dados">Banco de dados</option>
-                    <option value="Redes de computadores">Redes de computadores</option>
-                    <option value="Faculdade - ADS">Faculdade - ADS</option>
-                    <option value="Geral">Geral</option>
-                </select>
-
-                <input
-                    type="hidden"
-                    name="duracao_minutos"
-                    value="25"
-                >
-
-                <div
-                    id="visor-pomodoro"
-                    class="visor-pomodoro"
-                    role="timer"
-                    aria-live="off"
-                >
-                    25:00
-                </div>
-
-                <div class="botoes-pomodoro">
-
-                    <button
-                        type="button"
-                        id="botao-iniciar-pomodoro"
-                        onclick="iniciarPomodoro()"
-                    >
-                        Iniciar
-                    </button>
-
-                    <button
-                        type="button"
-                        id="botao-pausar-pomodoro"
-                        onclick="pausarPomodoro()"
-                    >
-                        Pausar
-                    </button>
-
-                    <button
-                        type="button"
-                        id="botao-reiniciar-pomodoro"
-                        onclick="reiniciarPomodoro()"
-                    >
-                        Reiniciar
-                    </button>
-
-                </div>
-
-            </form>
-
-            <p
-                id="status-pomodoro"
-                class="dica-pomodoro"
-                aria-live="polite"
-            >
-                Pronto para começar?
-            </p>
-
-        </section>
-
-        <!-- Meta diária e registro manual -->
-        <section class="secao-meta" id="meta">
-
-            <h2>Minha meta diária</h2>
-
-            <p>Defina seu objetivo e acompanhe seu progresso de hoje.</p>
-
-            <div class="resumo-meta">
-
-                <div>
-                    <span>Meta diária</span>
-                    <strong>{{ minutos_meta }} min</strong>
-                </div>
-
-                <div>
-                    <span>Estudado hoje</span>
-                    <strong>{{ minutos_estudados }} min</strong>
-                </div>
-
-                <div>
-                    <span>Faltam</span>
-                    <strong>{{ minutos_restantes }} min</strong>
-                </div>
-
-            </div>
-
-            <div
-                class="barra-progresso"
-                role="progressbar"
-                aria-label="Progresso da meta diária"
-                aria-valuemin="0"
-                aria-valuemax="100"
-                aria-valuenow="{{ progresso }}"
-            >
-                <div
-                    class="progresso-preenchido"
-                    style="--progresso: {{ progresso }}%;"
-                ></div>
-            </div>
-
-            <p class="texto-progresso">
-                {{ progresso }}% da meta concluída hoje
-            </p>
-
-            {% if minutos_estudados >= minutos_meta %}
-                <p class="mensagem-meta">
-                    Parabéns! Você alcançou sua meta diária!
-                </p>
-            {% endif %}
-
-            <!-- Alterar meta diária -->
-            <form
-                action="{{ url_for('definir_meta') }}"
-                method="POST"
-            >
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-                <h3>Alterar meta diária</h3>
-
-                <label for="minutos_meta">
-                    Quantos minutos deseja estudar por dia?
-                </label>
-
-                <input
-                    type="number"
-                    id="minutos_meta"
-                    name="minutos_meta"
-                    min="1"
-                    max="1440"
-                    value="{{ minutos_meta }}"
-                    required
-                >
-
-                <button type="submit">Salvar meta</button>
-
-            </form>
-
-            <!-- Registro manual de estudo -->
-            <form
-                id="form-registro-manual"
-                action="{{ url_for('registrar_estudo') }}"
-                method="POST"
-                onsubmit="return prepararRegistroManual(this);"
-            >
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-                <h3>Registrar sessão de estudo</h3>
-
-                <input
-                    type="hidden"
-                    name="identificador"
-                    class="identificador-manual"
-                >
-
-                <label for="materia-estudo">Matéria estudada</label>
-
-                <select id="materia-estudo" name="materia" required>
-                    <option value="Python">Python</option>
-                    <option value="JavaScript">JavaScript</option>
-                    <option value="Banco de dados">Banco de dados</option>
-                    <option value="Redes de computadores">Redes de computadores</option>
-                    <option value="Faculdade - ADS">Faculdade - ADS</option>
-                    <option value="Geral">Geral</option>
-                </select>
-
-                <label for="duracao_minutos">Duração em minutos</label>
-
-                <input
-                    type="number"
-                    id="duracao_minutos"
-                    name="duracao_minutos"
-                    min="1"
-                    max="1440"
-                    placeholder="Ex.: 30"
-                    required
-                >
-
-                <button type="submit">Registrar estudo</button>
-
-            </form>
-
-        </section>
-
-        <!-- Cadastro de anotações -->
-        <section id="nova-anotacao">
-
-            <h2>Nova anotação</h2>
-
-            <p>Registre conceitos, comandos, resumos e aprendizados.</p>
-
-            <form
-                action="{{ url_for('nova_anotacao') }}"
-                method="POST"
-            >
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-                <label for="titulo">Título da anotação</label>
-
-                <input
-                    type="text"
-                    id="titulo"
-                    name="titulo"
-                    maxlength="150"
-                    placeholder="Ex.: O que é uma variável?"
-                    required
-                >
-
-                <label for="categoria">Categoria de estudo</label>
-
-                <select id="categoria" name="categoria" required>
-                    {% for categoria in categorias %}
-                        <option value="{{ categoria }}">
-                            {{ categoria }}
-                        </option>
-                    {% endfor %}
-                </select>
-
-                <label for="materia">Matéria ou tecnologia</label>
-
-                <input
-                    type="text"
-                    id="materia"
-                    name="materia"
-                    maxlength="100"
-                    placeholder="Ex.: Python, SQL, Matemática..."
-                    required
-                >
-
-                <label for="conteudo">Conteúdo da anotação</label>
-
-                <textarea
-                    id="conteudo"
-                    name="conteudo"
-                    rows="6"
-                    maxlength="20000"
-                    placeholder="Escreva aqui o que você aprendeu..."
-                    required
-                ></textarea>
-
-                <button type="submit">Salvar anotação</button>
-
-            </form>
-
-        </section>
-
-        <!-- Biblioteca de anotações -->
-        <section id="biblioteca">
-
-            <h2>Minha biblioteca</h2>
-
-            <p>Consulte, pesquise e filtre seus aprendizados.</p>
-
-            <!-- Pesquisa e filtros: GET não precisa de token CSRF -->
-            <form
-                action="{{ url_for('inicio') }}"
-                method="GET"
-                class="form-pesquisa"
-            >
-
-                <label for="pesquisa">Pesquisar anotações</label>
-
-                <input
-                    type="search"
-                    id="pesquisa"
-                    name="pesquisa"
-                    placeholder="Título, conceito ou tecnologia..."
-                    value="{{ pesquisa }}"
-                >
-
-                <label for="materia-filtro">Filtrar por matéria</label>
-
-                <select id="materia-filtro" name="materia">
-
-                    <option value="">Todas as matérias</option>
-
-                    {% for item in materias %}
-                        <option
-                            value="{{ item['materia'] }}"
-                            {% if materia_selecionada == item['materia'] %}
-                                selected
+                            {% if anotacao["assunto_nome"] %}
+                                <p class="assunto-anotacao"><strong>Assunto:</strong> {{ anotacao["assunto_nome"] }}</p>
                             {% endif %}
-                        >
-                            {{ item['materia'] }}
-                        </option>
-                    {% endfor %}
 
-                </select>
+                            <p class="conteudo-anotacao">{{ anotacao["conteudo"] }}</p>
 
-                <label for="categoria-filtro">Filtrar por categoria</label>
+                            <small>
+                                Criada em: {{ anotacao["criado_em"] }}
+                            </small>
 
-                <select id="categoria-filtro" name="categoria">
+                            <div class="acoes-anotacao">
 
-                    <option value="">Todas as categorias</option>
-
-                    {% for categoria in categorias %}
-                        <option
-                            value="{{ categoria }}"
-                            {% if categoria_selecionada == categoria %}
-                                selected
-                            {% endif %}
-                        >
-                            {{ categoria }}
-                        </option>
-                    {% endfor %}
-
-                </select>
-
-                <label for="favoritas">Exibir favoritos</label>
-
-                <select id="favoritas" name="favoritas">
-
-                    <option
-                        value=""
-                        {% if not somente_favoritas %}selected{% endif %}
-                    >
-                        Todas as anotações
-                    </option>
-
-                    <option
-                        value="1"
-                        {% if somente_favoritas %}selected{% endif %}
-                    >
-                        Somente favoritas
-                    </option>
-
-                </select>
-
-                <div class="acoes-pesquisa">
-
-                    <button type="submit">Pesquisar</button>
-
-                    <a href="{{ url_for('inicio') }}">
-                        Limpar filtros
-                    </a>
-
-                </div>
-
-            </form>
-
-            <!-- Resultados da biblioteca -->
-            {% if anotacoes %}
-
-                {% for anotacao in anotacoes %}
-
-                    <article class="cartao-anotacao">
-
-                        <h3>{{ anotacao["titulo"] }}</h3>
-
-                        <p class="linha-categoria">
-                            <span class="etiqueta-categoria">
-                                {{ anotacao["categoria"] }}
-                            </span>
-                        </p>
-
-                        <p>
-                            <strong>Matéria:</strong>
-                            {{ anotacao["materia"] }}
-                        </p>
-
-                        <p class="conteudo-anotacao">{{ anotacao["conteudo"] }}</p>
-
-                        <small>
-                            Criada em: {{ anotacao["criado_em"] }}
-                        </small>
-
-                        <div class="acoes-anotacao">
-
-                            <!-- Favoritar -->
-                            <form
-                                action="{{ url_for('favoritar_anotacao', id=anotacao['id']) }}"
-                                method="POST"
-                            >
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-                                <button
-                                    class="botao-favorito {% if anotacao['favorita'] == 1 %}favorito-ativo{% endif %}"
-                                    type="submit"
+                                <!-- Favoritar -->
+                                <form
+                                    action="{{ url_for('favoritar_anotacao', id=anotacao['id']) }}"
+                                    method="POST"
                                 >
-                                    {% if anotacao['favorita'] == 1 %}
-                                        ★ Favoritada
-                                    {% else %}
-                                        ☆ Favoritar
-                                    {% endif %}
-                                </button>
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-                            </form>
+                                    <button
+                                        class="botao-favorito {% if anotacao['favorita'] == 1 %}favorito-ativo{% endif %}"
+                                        type="submit"
+                                    >
+                                        {% if anotacao['favorita'] == 1 %}
+                                            ★ Favoritada
+                                        {% else %}
+                                            ☆ Favoritar
+                                        {% endif %}
+                                    </button>
 
-                            <!-- Editar -->
-                            <a
-                                class="botao-editar"
-                                href="{{ url_for('editar_anotacao', id=anotacao['id']) }}"
-                            >
-                                Editar
+                                </form>
+
+                                <!-- Editar -->
+                                <a
+                                    class="botao-editar"
+                                    href="{{ url_for('editar_anotacao', id=anotacao['id']) }}"
+                                >
+                                    Editar
+                                </a>
+
+                                <!-- Excluir -->
+                                <form
+                                    action="{{ url_for('excluir_anotacao', id=anotacao['id']) }}"
+                                    method="POST"
+                                    onsubmit="return confirm('Tem certeza de que deseja excluir esta anotação?');"
+                                >
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                                    <button
+                                        class="botao-excluir"
+                                        type="submit"
+                                    >
+                                        Excluir
+                                    </button>
+
+                                </form>
+
+                            </div>
+
+                        </article>
+
+                    {% endfor %}
+
+                {% else %}
+
+                    <article class="estado-vazio">
+
+                        {% if somente_favoritas %}
+
+                            <h3>Nenhuma anotação favorita ainda</h3>
+
+                            <p>
+                                Você ainda não favoritou nenhuma anotação.
+                                Clique em “Favoritar” para guardar seus conteúdos
+                                mais importantes.
+                            </p>
+
+                            <a href="{{ url_for('inicio') }}">
+                                Ver todas as anotações
                             </a>
 
-                            <!-- Excluir -->
-                            <form
-                                action="{{ url_for('excluir_anotacao', id=anotacao['id']) }}"
-                                method="POST"
-                                onsubmit="return confirm('Tem certeza de que deseja excluir esta anotação?');"
-                            >
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        {% elif pesquisa or materia_selecionada or categoria_selecionada %}
 
-                                <button
-                                    class="botao-excluir"
-                                    type="submit"
-                                >
-                                    Excluir
-                                </button>
+                            <h3>Nenhum resultado encontrado</h3>
 
-                            </form>
+                            <p>
+                                Não encontramos anotações com os filtros selecionados.
+                            </p>
 
-                        </div>
+                            <a href="{{ url_for('inicio') }}">
+                                Limpar pesquisa e filtros
+                            </a>
+
+                        {% else %}
+
+                            <h3>Sua biblioteca está começando!</h3>
+
+                            <p>
+                                Registre seu primeiro aprendizado no formulário acima.
+                            </p>
+
+                        {% endif %}
 
                     </article>
 
-                {% endfor %}
+                {% endif %}
 
-            {% else %}
-
-                <article class="estado-vazio">
-
-                    {% if somente_favoritas %}
-
-                        <h3>Nenhuma anotação favorita ainda</h3>
-
-                        <p>
-                            Você ainda não favoritou nenhuma anotação.
-                            Clique em “Favoritar” para guardar seus conteúdos
-                            mais importantes.
-                        </p>
-
-                        <a href="{{ url_for('inicio') }}">
-                            Ver todas as anotações
-                        </a>
-
-                    {% elif pesquisa or materia_selecionada or categoria_selecionada %}
-
-                        <h3>Nenhum resultado encontrado</h3>
-
-                        <p>
-                            Não encontramos anotações com os filtros selecionados.
-                        </p>
-
-                        <a href="{{ url_for('inicio') }}">
-                            Limpar pesquisa e filtros
-                        </a>
-
-                    {% else %}
-
-                        <h3>Sua biblioteca está começando!</h3>
-
-                        <p>
-                            Registre seu primeiro aprendizado no formulário acima.
-                        </p>
-
-                    {% endif %}
-
-                </article>
-
-            {% endif %}
-
-        </section>
+            </section>
 
         </main>
 
-    <!-- Rodapé -->
-    <footer class="rodape">
-        <p>DevStudy — Aprender, praticar e evoluir.</p>
-    </footer>
+        <!-- Rodapé -->
+        <footer class="rodape">
+            <p>DevStudy — Aprender, praticar e evoluir.</p>
+        </footer>
 
     </div>
 </div>
 
-    <!-- JavaScript do Pomodoro -->
-    <script src="{{ url_for('static', filename='pomodoro.js') }}" defer></script>
+<!-- JavaScript do Pomodoro -->
+<script src="{{ url_for('static', filename='pomodoro.js') }}" defer></script>
 
-    <!-- JavaScript do registro manual -->
-    <script>
-        function prepararRegistroManual(formulario) {
-            if (formulario.dataset.enviando === "true") {
-                return false;
-            }
-
-            const campoIdentificador = formulario.querySelector(
-                ".identificador-manual"
-            );
-
-            if (!campoIdentificador) {
-                alert("Não foi possível preparar o registro.");
-                return false;
-            }
-
-            if (
-                !window.crypto ||
-                typeof window.crypto.randomUUID !== "function"
-            ) {
-                alert(
-                    "Seu navegador não conseguiu gerar um identificador. " +
-                    "Tente abrir o DevStudy em http://127.0.0.1:5000."
-                );
-
-                return false;
-            }
-
-            campoIdentificador.value = window.crypto.randomUUID();
-            formulario.dataset.enviando = "true";
-
-            const botoes = formulario.querySelectorAll(
-                'button[type="submit"]'
-            );
-
-            botoes.forEach((botao) => {
-                botao.disabled = true;
-                botao.textContent = "Registrando...";
-            });
-
-            return true;
+<!-- JavaScript do registro manual -->
+<script>
+    function prepararRegistroManual(formulario) {
+        if (formulario.dataset.enviando === "true") {
+            return false;
         }
-    </script>
+
+        const campoIdentificador = formulario.querySelector(
+            ".identificador-manual"
+        );
+
+        if (!campoIdentificador) {
+            alert("Não foi possível preparar o registro.");
+            return false;
+        }
+
+        if (
+            !window.crypto ||
+            typeof window.crypto.randomUUID !== "function"
+        ) {
+            alert(
+                "Seu navegador não conseguiu gerar um identificador. " +
+                "Tente abrir o DevStudy em http://127.0.0.1:5000."
+            );
+
+            return false;
+        }
+
+        campoIdentificador.value = window.crypto.randomUUID();
+        formulario.dataset.enviando = "true";
+
+        const botoes = formulario.querySelectorAll(
+            'button[type="submit"]'
+        );
+
+        botoes.forEach((botao) => {
+            botao.disabled = true;
+            botao.textContent = "Registrando...";
+        });
+
+        return true;
+    }
+</script>
+
+<script>
+    function filtrarAssuntosPorMateria(campoMateria, campoAssunto) {
+        const materia = document.getElementById(campoMateria);
+        const assunto = document.getElementById(campoAssunto);
+        if (!materia || !assunto) return;
+
+        const nomeMateria = materia.value.trim().normalize("NFC").toLocaleLowerCase("pt-BR");
+        Array.from(assunto.options).forEach((opcao) => {
+            if (!opcao.value) return;
+            const materiaDoAssunto = (opcao.dataset.materia || "")
+                .trim().normalize("NFC").toLocaleLowerCase("pt-BR");
+            const disponivel = nomeMateria !== "" && materiaDoAssunto === nomeMateria;
+            opcao.hidden = !disponivel;
+            opcao.disabled = !disponivel;
+            if (!disponivel && opcao.selected) assunto.value = "";
+        });
+    }
+
+    const materiaNota = document.getElementById("materia");
+    if (materiaNota) {
+        materiaNota.addEventListener("input", () =>
+            filtrarAssuntosPorMateria("materia", "assunto-anotacao")
+        );
+        filtrarAssuntosPorMateria("materia", "assunto-anotacao");
+    }
+</script>
 
 </body>
 </html>

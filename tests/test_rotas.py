@@ -1,4 +1,6 @@
 
+import csv
+import io
 import uuid
 
 import pytest
@@ -263,7 +265,7 @@ def test_registrar_sessao_estudo(cliente):
     resposta = cliente.post(
         "/registrar-estudo",
         data={
-            "materia": "Python",
+            "materia": "Banco de Dados",
             "duracao_minutos": "25",
             "identificador": identificador
         },
@@ -281,7 +283,7 @@ def test_registrar_sessao_estudo(cliente):
         """, (identificador,)).fetchone()
 
         assert sessao is not None
-        assert sessao["materia"] == "Python"
+        assert sessao["materia"] == "Banco de Dados"
         assert sessao["duracao_minutos"] == 25
         assert sessao["identificador"] == identificador
     finally:
@@ -292,7 +294,7 @@ def test_impedir_sessao_duplicada(cliente):
     identificador = "550e8400-e29b-41d4-a716-446655440001"
 
     dados = {
-        "materia": "Python",
+        "materia": "Banco de Dados",
         "duracao_minutos": "25",
         "identificador": identificador
     }
@@ -335,7 +337,7 @@ def test_registrar_estudo_rejeita_duracao_invalida(
     resposta = cliente.post(
         "/registrar-estudo",
         data={
-            "materia": "Python",
+            "materia": "Banco de Dados",
             "duracao_minutos": duracao,
             "identificador": identificador
         },
@@ -398,7 +400,7 @@ def test_historico_com_sessoes_de_estudo(cliente):
     resposta = cliente.post(
         "/registrar-estudo",
         data={
-            "materia": "Python",
+            "materia": "Banco de Dados",
             "duracao_minutos": "30",
             "identificador": identificador
         },
@@ -418,13 +420,13 @@ def test_historico_com_sessoes_de_estudo(cliente):
         conexao.close()
 
     assert sessao is not None
-    assert sessao["materia"] == "Python"
+    assert sessao["materia"] == "Banco de Dados"
     assert sessao["duracao_minutos"] == 30
 
     resposta = cliente.get("/historico")
 
     assert resposta.status_code == 200
-    assert b"Python" in resposta.data
+    assert "Banco de Dados".encode("utf-8") in resposta.data
     assert b"30" in resposta.data
 
 
@@ -461,7 +463,7 @@ def test_excluir_anotacao_inexistente(cliente):
         follow_redirects=True
     )
 
-    assert resposta.status_code == 200
+    assert resposta.status_code == 404
 
 
 def test_favoritar_anotacao_inexistente(cliente):
@@ -470,7 +472,7 @@ def test_favoritar_anotacao_inexistente(cliente):
         follow_redirects=True
     )
 
-    assert resposta.status_code == 200
+    assert resposta.status_code == 404
 
 
 def test_abrir_pagina_edicao_anotacao(cliente):
@@ -525,7 +527,7 @@ def test_editar_anotacao_rejeita_dados_invalidos(cliente):
         }
     )
 
-    assert resposta.status_code == 200
+    assert resposta.status_code == 400
 
     conexao = database.conectar()
     try:
@@ -693,7 +695,7 @@ def test_csrf_bloqueia_post_sem_token(cliente):
         app.config["WTF_CSRF_ENABLED"] = False
 
         
-def criar_sessao_teste(materia="Python", duracao=30):
+def criar_sessao_teste(materia="Banco de Dados", duracao=30):
     """Cria uma sessão de estudo no banco usado pelo teste."""
     conexao = database.conectar()
     try:
@@ -715,7 +717,7 @@ def test_abrir_pagina_edicao_sessao(cliente):
     resposta = cliente.get(f"/editar-sessao/{sessao_id}")
 
     assert resposta.status_code == 200
-    assert b"Python" in resposta.data
+    assert "Banco de Dados".encode("utf-8") in resposta.data
 
 
 def test_editar_sessao_atualiza_materia_e_duracao(cliente):
@@ -724,7 +726,7 @@ def test_editar_sessao_atualiza_materia_e_duracao(cliente):
     resposta = cliente.post(
         f"/editar-sessao/{sessao_id}",
         data={
-            "materia": "JavaScript",
+            "materia": "Sistemas Operacionais",
             "duracao_minutos": "45"
         },
         follow_redirects=True
@@ -741,7 +743,7 @@ def test_editar_sessao_atualiza_materia_e_duracao(cliente):
         """, (sessao_id,)).fetchone()
 
         assert sessao is not None
-        assert sessao["materia"] == "JavaScript"
+        assert sessao["materia"] == "Sistemas Operacionais"
         assert sessao["duracao_minutos"] == 45
     finally:
         conexao.close()
@@ -768,7 +770,7 @@ def test_editar_sessao_rejeita_dados_invalidos(cliente):
             WHERE id = ?
         """, (sessao_id,)).fetchone()
 
-        assert sessao["materia"] == "Python"
+        assert sessao["materia"] == "Banco de Dados"
         assert sessao["duracao_minutos"] == 30
     finally:
         conexao.close()
@@ -890,7 +892,7 @@ def test_pagina_materias_abre(cliente):
     resposta = cliente.get("/materias")
 
     assert resposta.status_code == 200
-    assert b"Minhas mat" in resposta.data
+    assert "Matérias e assuntos".encode("utf-8") in resposta.data
 
 
 def test_cadastrar_materia_personalizada(cliente):
@@ -1059,3 +1061,494 @@ def test_csrf_bloqueia_cadastro_materia_sem_token(cliente):
 
     finally:
         app.config["WTF_CSRF_ENABLED"] = False
+
+
+def test_cadastrar_assunto_vinculado_a_materia(cliente):
+    conexao = database.conectar()
+    try:
+        materia = conexao.execute(
+            "SELECT id FROM materias WHERE nome = 'Banco de Dados'"
+        ).fetchone()
+    finally:
+        conexao.close()
+
+    resposta = cliente.post(
+        f"/materia/{materia['id']}/assuntos",
+        data={"nome": "Estruturas condicionais"},
+        follow_redirects=True
+    )
+
+    assert resposta.status_code == 200
+    assert "Estruturas condicionais".encode("utf-8") in resposta.data
+
+    conexao = database.conectar()
+    try:
+        assunto = conexao.execute("""
+            SELECT assuntos.nome, materias.nome AS materia
+            FROM assuntos
+            JOIN materias ON materias.id = assuntos.materia_id
+            WHERE assuntos.nome = ?
+        """, ("Estruturas condicionais",)).fetchone()
+
+        assert assunto["materia"] == "Banco de Dados"
+    finally:
+        conexao.close()
+
+
+def test_assunto_rejeita_duplicata_sem_diferenciar_caixa(cliente):
+    materia = database.conectar().execute(
+        "SELECT id FROM materias WHERE nome = 'Banco de Dados'"
+    ).fetchone()
+
+    cliente.post(
+        f"/materia/{materia['id']}/assuntos",
+        data={"nome": "Variáveis"}
+    )
+    resposta = cliente.post(
+        f"/materia/{materia['id']}/assuntos",
+        data={"nome": "VARIÁVEIS"},
+        follow_redirects=True
+    )
+
+    assert resposta.status_code == 200
+    assert "Esse assunto já existe".encode("utf-8") in resposta.data
+
+    conexao = database.conectar()
+    try:
+        total = conexao.execute("""
+            SELECT COUNT(*) FROM assuntos WHERE materia_id = ?
+        """, (materia["id"],)).fetchone()[0]
+        assert total == 1
+    finally:
+        conexao.close()
+
+
+@pytest.mark.parametrize("nome", ["", "   ", "A" * 81])
+def test_assunto_rejeita_nome_invalido(cliente, nome):
+    materia = database.conectar().execute(
+        "SELECT id FROM materias WHERE nome = 'Banco de Dados'"
+    ).fetchone()
+
+    resposta = cliente.post(
+        f"/materia/{materia['id']}/assuntos",
+        data={"nome": nome},
+        follow_redirects=True
+    )
+
+    assert resposta.status_code == 200
+    assert "Informe um assunto".encode("utf-8") in resposta.data
+
+    conexao = database.conectar()
+    try:
+        assert conexao.execute(
+            "SELECT COUNT(*) FROM assuntos"
+        ).fetchone()[0] == 0
+    finally:
+        conexao.close()
+
+
+def test_excluir_assunto_nao_exclui_materia(cliente):
+    materia = database.conectar().execute(
+        "SELECT id FROM materias WHERE nome = 'Banco de Dados'"
+    ).fetchone()
+    resposta = cliente.post(
+        f"/materia/{materia['id']}/assuntos",
+        data={"nome": "Listas"}
+    )
+    assert resposta.status_code == 302
+
+    conexao = database.conectar()
+    try:
+        assunto = conexao.execute(
+            "SELECT id FROM assuntos WHERE nome = 'Listas'"
+        ).fetchone()
+    finally:
+        conexao.close()
+
+    resposta = cliente.post(
+        f"/assunto/{assunto['id']}/excluir",
+        follow_redirects=True
+    )
+
+    assert resposta.status_code == 200
+    conexao = database.conectar()
+    try:
+        assert conexao.execute(
+            "SELECT id FROM materias WHERE id = ?", (materia["id"],)
+        ).fetchone() is not None
+        assert conexao.execute(
+            "SELECT id FROM assuntos WHERE id = ?", (assunto["id"],)
+        ).fetchone() is None
+    finally:
+        conexao.close()
+
+
+def test_anotacao_pode_ser_associada_a_assunto(cliente):
+    conexao = database.conectar()
+    try:
+        materia = conexao.execute(
+            "SELECT id FROM materias WHERE nome = 'Banco de Dados'"
+        ).fetchone()
+        cursor = conexao.execute(
+            "INSERT INTO assuntos (materia_id, nome) VALUES (?, ?)",
+            (materia["id"], "Variáveis")
+        )
+        assunto_id = cursor.lastrowid
+        conexao.commit()
+    finally:
+        conexao.close()
+
+    resposta = cliente.post(
+        "/nova-anotacao",
+        data={
+            "titulo": "Anotação sobre variáveis",
+            "materia": "Banco de Dados",
+            "assunto_id": str(assunto_id),
+            "conteudo": "Uma variável guarda um valor.",
+            "categoria": "Programação"
+        },
+        follow_redirects=True
+    )
+
+    assert resposta.status_code == 200
+    assert "Variáveis".encode("utf-8") in resposta.data
+    conexao = database.conectar()
+    try:
+        nota = conexao.execute("""
+            SELECT assunto_id
+            FROM anotacoes
+            WHERE titulo = 'Anotação sobre variáveis'
+        """).fetchone()
+        assert nota["assunto_id"] == assunto_id
+    finally:
+        conexao.close()
+
+
+def test_anotacao_rejeita_assunto_de_outra_materia(cliente):
+    conexao = database.conectar()
+    try:
+        materia = conexao.execute(
+            "SELECT id FROM materias WHERE nome = 'Banco de Dados'"
+        ).fetchone()
+        cursor = conexao.execute(
+            "INSERT INTO assuntos (materia_id, nome) VALUES (?, ?)",
+            (materia["id"], "Funções")
+        )
+        assunto_id = cursor.lastrowid
+        conexao.commit()
+    finally:
+        conexao.close()
+
+    resposta = cliente.post(
+        "/nova-anotacao",
+        data={
+            "titulo": "Associação incorreta",
+            "materia": "JavaScript",
+            "assunto_id": str(assunto_id),
+            "conteudo": "Conteúdo de teste",
+            "categoria": "Programação"
+        },
+        follow_redirects=True
+    )
+
+    assert resposta.status_code == 200
+    assert "não pertence a essa matéria".encode("utf-8") in resposta.data
+    conexao = database.conectar()
+    try:
+        assert conexao.execute(
+            "SELECT id FROM anotacoes WHERE titulo = 'Associação incorreta'"
+        ).fetchone() is None
+    finally:
+        conexao.close()
+
+
+def test_editar_anotacao_permite_associar_e_remover_assunto(cliente):
+    conexao = database.conectar()
+    try:
+        materia = conexao.execute(
+            "SELECT id FROM materias WHERE nome = 'Banco de Dados'"
+        ).fetchone()
+        assunto_cursor = conexao.execute(
+            "INSERT INTO assuntos (materia_id, nome) VALUES (?, ?)",
+            (materia["id"], "Listas")
+        )
+        assunto_id = assunto_cursor.lastrowid
+        anotacao_cursor = conexao.execute("""
+            INSERT INTO anotacoes (titulo, materia, conteudo, categoria)
+            VALUES ('Nota editada', 'Banco de Dados', 'Texto', 'Programação')
+        """)
+        anotacao_id = anotacao_cursor.lastrowid
+        conexao.commit()
+    finally:
+        conexao.close()
+
+    dados = {
+        "titulo": "Nota editada",
+        "materia": "Banco de Dados",
+        "assunto_id": str(assunto_id),
+        "conteudo": "Texto atualizado",
+        "categoria": "Programação"
+    }
+    assert cliente.post(
+        f"/editar-anotacao/{anotacao_id}", data=dados
+    ).status_code == 302
+
+    dados["assunto_id"] = ""
+    assert cliente.post(
+        f"/editar-anotacao/{anotacao_id}", data=dados
+    ).status_code == 302
+
+    conexao = database.conectar()
+    try:
+        nota = conexao.execute(
+            "SELECT assunto_id FROM anotacoes WHERE id = ?",
+            (anotacao_id,)
+        ).fetchone()
+        assert nota["assunto_id"] is None
+    finally:
+        conexao.close()
+
+
+def test_remover_assunto_desvincula_anotacao_sem_apaga_la(cliente):
+    conexao = database.conectar()
+    try:
+        materia = conexao.execute(
+            "SELECT id FROM materias WHERE nome = 'Banco de Dados'"
+        ).fetchone()
+        cursor_assunto = conexao.execute(
+            "INSERT INTO assuntos (materia_id, nome) VALUES (?, ?)",
+            (materia["id"], "Dicionários")
+        )
+        assunto_id = cursor_assunto.lastrowid
+        cursor_nota = conexao.execute("""
+            INSERT INTO anotacoes
+                (titulo, materia, conteudo, categoria, assunto_id)
+            VALUES ('Nota vinculada', 'Banco de Dados', 'Conteúdo', 'Programação', ?)
+        """, (assunto_id,))
+        anotacao_id = cursor_nota.lastrowid
+        conexao.commit()
+    finally:
+        conexao.close()
+
+    resposta = cliente.post(
+        f"/assunto/{assunto_id}/excluir",
+        follow_redirects=True
+    )
+    assert resposta.status_code == 200
+
+    conexao = database.conectar()
+    try:
+        anotacao = conexao.execute(
+            "SELECT assunto_id, conteudo FROM anotacoes WHERE id = ?",
+            (anotacao_id,)
+        ).fetchone()
+        assert anotacao["assunto_id"] is None
+        assert anotacao["conteudo"] == "Conteúdo"
+    finally:
+        conexao.close()
+
+
+def test_busca_por_categoria_e_ordenacao_alfabetica(cliente):
+    conexao = database.conectar()
+    try:
+        conexao.executemany("""
+            INSERT INTO anotacoes (titulo, materia, conteudo, categoria)
+            VALUES (?, ?, ?, ?)
+        """, [
+            ("Zebra da busca", "Python", "Conteúdo Z", "Programação"),
+            ("Abacaxi da busca", "Python", "Conteúdo A", "Programação"),
+            ("Nota fora do filtro", "JavaScript", "Outro", "Outros")
+        ])
+        conexao.commit()
+    finally:
+        conexao.close()
+
+    resposta = cliente.get("/", query_string={
+        "pesquisa": "Programação",
+        "materia": "Python",
+        "categoria": "Programação",
+        "favoritas": "",
+        "ordenar": "titulo_az"
+    })
+
+    assert resposta.status_code == 200
+    assert b"Abacaxi da busca" in resposta.data
+    assert b"Zebra da busca" in resposta.data
+    assert b"Nota fora do filtro" not in resposta.data
+    assert resposta.data.index(b"Abacaxi da busca") < resposta.data.index(
+        b"Zebra da busca"
+    )
+
+
+def test_meta_semanal_cria_atualiza_e_remove(cliente):
+    conexao = database.conectar()
+    try:
+        materia = conexao.execute(
+            "SELECT id FROM materias WHERE nome = ?",
+            ("Banco de Dados",)
+        ).fetchone()
+        materia_id = materia["id"]
+    finally:
+        conexao.close()
+
+    resposta = cliente.post("/meta-semanal", data={
+        "materia_id": str(materia_id),
+        "minutos_meta": "120"
+    })
+    assert resposta.status_code == 302
+
+    conexao = database.conectar()
+    try:
+        meta = conexao.execute(
+            "SELECT minutos_meta FROM metas_semanais WHERE materia_id = ?",
+            (materia_id,)
+        ).fetchone()
+        assert meta["minutos_meta"] == 120
+    finally:
+        conexao.close()
+
+    cliente.post("/meta-semanal", data={
+        "materia_id": str(materia_id),
+        "minutos_meta": "240"
+    })
+    cliente.post("/meta-semanal", data={
+        "materia_id": str(materia_id),
+        "minutos_meta": "0"
+    })
+
+    conexao = database.conectar()
+    try:
+        meta = conexao.execute(
+            "SELECT id FROM metas_semanais WHERE materia_id = ?",
+            (materia_id,)
+        ).fetchone()
+        assert meta is None
+    finally:
+        conexao.close()
+
+
+def test_exportacoes_csv_incluem_dados_e_protegem_formulas(cliente):
+    conexao = database.conectar()
+    try:
+        conexao.execute("""
+            INSERT INTO anotacoes (titulo, materia, conteudo, categoria)
+            VALUES (?, ?, ?, ?)
+        """, ("=1+1", "Python", "Resumo", "Programação"))
+        conexao.execute("""
+            INSERT INTO sessoes_estudo (materia, duracao_minutos)
+            VALUES (?, ?)
+        """, ("Python", 35))
+        conexao.commit()
+    finally:
+        conexao.close()
+
+    resposta_anotacoes = cliente.get("/exportar/anotacoes.csv")
+    assert resposta_anotacoes.status_code == 200
+    assert "devstudy-anotacoes.csv" in resposta_anotacoes.headers[
+        "Content-Disposition"
+    ]
+    linhas_anotacoes = list(csv.reader(
+        io.StringIO(resposta_anotacoes.data.decode("utf-8-sig")),
+        delimiter=";"
+    ))
+    assert linhas_anotacoes[1][1] == "'=1+1"
+
+    resposta_sessoes = cliente.get("/exportar/sessoes.csv")
+    assert resposta_sessoes.status_code == 200
+    linhas_sessoes = list(csv.reader(
+        io.StringIO(resposta_sessoes.data.decode("utf-8-sig")),
+        delimiter=";"
+    ))
+    assert linhas_sessoes[1][1:3] == ["Python", "35"]
+
+
+def test_pagina_minhas_disciplinas_apresenta_grade_completa(cliente):
+    resposta = cliente.get("/disciplinas")
+
+    assert resposta.status_code == 200
+    assert "Minhas disciplinas".encode("utf-8") in resposta.data
+    for nome in database.MATERIAS_INICIAIS:
+        assert nome.encode("utf-8") in resposta.data
+
+
+def test_filtros_de_disciplinas_por_nome_e_semestre(cliente):
+    conexao = database.conectar()
+    try:
+        materia = conexao.execute(
+            "SELECT id FROM materias WHERE nome = 'Banco de Dados'"
+        ).fetchone()
+        materia_id = materia["id"]
+    finally:
+        conexao.close()
+
+    resposta_salvar = cliente.post(
+        f"/disciplina/{materia_id}/semestre",
+        data={"semestre": "2"}
+    )
+    assert resposta_salvar.status_code == 302
+
+    resposta = cliente.get("/disciplinas", query_string={
+        "pesquisa": "Banco de Dados",
+        "semestre": "2"
+    })
+    assert resposta.status_code == 200
+    assert "Banco de Dados".encode("utf-8") in resposta.data
+    assert "Sistemas Operacionais".encode("utf-8") not in resposta.data
+
+
+def test_disciplina_nova_e_pagina_individual(cliente):
+    resposta = cliente.post("/disciplinas/nova", data={
+        "nome": "Disciplina Personalizada",
+        "descricao": "Conteúdo configurável",
+        "semestre": ""
+    }, follow_redirects=True)
+    assert resposta.status_code == 200
+    assert "Esta disciplina ainda não tem conteúdo".encode("utf-8") in resposta.data
+
+    conexao = database.conectar()
+    try:
+        disciplina = conexao.execute(
+            "SELECT id, semestre FROM materias WHERE nome = ?",
+            ("Disciplina Personalizada",)
+        ).fetchone()
+        assert disciplina["semestre"] is None
+    finally:
+        conexao.close()
+
+    resposta = cliente.post(
+        f"/disciplina/{disciplina['id']}/novo-curso",
+        data={"titulo": "Primeiro conteúdo", "descricao": ""},
+        follow_redirects=True
+    )
+    assert resposta.status_code == 200
+    assert "Primeiro conteúdo".encode("utf-8") in resposta.data
+
+
+def test_progresso_da_disciplina_depende_de_aulas_concluidas(cliente):
+    conexao = database.conectar()
+    try:
+        disciplina = conexao.execute(
+            "SELECT id FROM materias WHERE nome = 'Banco de Dados'"
+        ).fetchone()
+        curso_id = conexao.execute("""
+            INSERT INTO cursos (titulo, materia_id)
+            VALUES ('Curso de prova', ?)
+        """, (disciplina["id"],)).lastrowid
+        modulo_id = conexao.execute("""
+            INSERT INTO modulos (curso_id, titulo)
+            VALUES (?, 'Módulo de prova')
+        """, (curso_id,)).lastrowid
+        conexao.execute("""
+            INSERT INTO aulas (modulo_id, titulo, concluida)
+            VALUES (?, 'Aula concluída', 1)
+        """, (modulo_id,))
+        conexao.commit()
+    finally:
+        conexao.close()
+
+    resposta = cliente.get("/disciplinas", query_string={
+        "status": "concluida"
+    })
+    assert resposta.status_code == 200
+    assert "Banco de Dados".encode("utf-8") in resposta.data
+    assert "100%".encode("utf-8") in resposta.data

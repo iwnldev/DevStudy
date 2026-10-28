@@ -1,5 +1,5 @@
 
-from flask import Flask, Response, render_template, request, redirect, url_for, abort, flash, session, g
+from flask import Flask, Response, render_template, request, redirect, url_for, abort, flash, session, g, jsonify
 from flask_wtf.csrf import CSRFProtect
 import csv
 import io
@@ -7,7 +7,7 @@ import json
 import os
 import uuid
 import calendar
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -16,12 +16,19 @@ import re
 import secrets
 import threading
 import sqlite3
+import smtplib
+import ssl
+from email.message import EmailMessage
 from pathlib import Path
+from urllib.parse import urlsplit
 from werkzeug.security import generate_password_hash, check_password_hash
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 from database import (conexao_aberta, criar_tabelas, inicializar_contas,
                       conectar_contas, criar_banco_usuario, definir_usuario_banco,
-                      restaurar_usuario_banco, popular_conteudo_inicial)
+                      restaurar_usuario_banco, popular_conteudo_inicial,
+                      popular_aulas_praticas, popular_aulas_didaticas,
+                      popular_aulas_aprofundamento)
 
 app = Flask(__name__)
 _chave_configurada = os.environ.get("DEVSTUDY_SECRET_KEY")
@@ -34,11 +41,18 @@ if not _chave_configurada:
         _chave_configurada = secrets.token_hex(32)
         _arquivo_chave_local.write_text(_chave_configurada, encoding="utf-8")
 app.config["SECRET_KEY"] = _chave_configurada
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=os.environ.get("DEVSTUDY_COOKIE_SECURE", "0") == "1",
+)
 
 csrf = CSRFProtect(app)
 
 _bootstrap_lock = threading.Lock()
 _bootstrap_pronto = False
+_usuarios_bancos_prontos = set()
+_usuarios_bancos_lock = threading.Lock()
 
 
 def _garantir_base_inicial():
@@ -49,6 +63,9 @@ def _garantir_base_inicial():
         if not _bootstrap_pronto:
             criar_tabelas()
             popular_conteudo_inicial()
+            popular_aulas_praticas()
+            popular_aulas_didaticas()
+            popular_aulas_aprofundamento()
             inicializar_contas()
             _bootstrap_pronto = True
 
@@ -58,12 +75,22 @@ def exigir_conta_e_selecionar_banco():
     if app.config.get("TESTING"):
         return None
     _garantir_base_inicial()
-    if request.endpoint in {"login", "registrar", "static"}:
+    if request.endpoint in {"login", "registrar", "static", "health", "verificar_email",
+                            "reenviar_verificacao", "recuperar_senha", "redefinir_senha"}:
         return None
     usuario_id = session.get("usuario_id")
     if not usuario_id:
         return redirect(url_for("login", proxima=request.full_path if request.query_string else request.path))
     g.db_context_token = definir_usuario_banco(usuario_id)
+    if usuario_id not in _usuarios_bancos_prontos:
+        with _usuarios_bancos_lock:
+            if usuario_id not in _usuarios_bancos_prontos:
+                criar_tabelas()
+                popular_conteudo_inicial()
+                popular_aulas_praticas()
+                popular_aulas_didaticas()
+                popular_aulas_aprofundamento()
+                _usuarios_bancos_prontos.add(usuario_id)
 
 
 @app.teardown_request
@@ -71,6 +98,57 @@ def restaurar_contexto_banco(_erro=None):
     token = getattr(g, "db_context_token", None)
     if token is not None:
         restaurar_usuario_banco(token)
+
+
+def _enviar_email(destinatario, assunto, corpo):
+    servidor = os.environ.get("DEVSTUDY_MAIL_SERVER", "").strip()
+    if not servidor:
+        if os.environ.get("FLASK_DEBUG") == "1":
+            app.logger.warning("E-mail de desenvolvimento para %s:\n%s", destinatario, corpo)
+        else:
+            app.logger.error("SMTP não configurado; e-mail transacional não enviado.")
+        return False
+    mensagem = EmailMessage()
+    mensagem["Subject"] = assunto
+    mensagem["From"] = os.environ.get("DEVSTUDY_MAIL_FROM", os.environ.get("DEVSTUDY_MAIL_USERNAME", "devstudy@localhost"))
+    mensagem["To"] = destinatario
+    mensagem.set_content(corpo)
+    porta = int(os.environ.get("DEVSTUDY_MAIL_PORT", "587"))
+    usuario = os.environ.get("DEVSTUDY_MAIL_USERNAME", "")
+    senha = os.environ.get("DEVSTUDY_MAIL_PASSWORD", "")
+    try:
+        if os.environ.get("DEVSTUDY_MAIL_USE_SSL", "0") == "1":
+            with smtplib.SMTP_SSL(servidor, porta, timeout=15, context=ssl.create_default_context()) as smtp:
+                if usuario:
+                    smtp.login(usuario, senha)
+                smtp.send_message(mensagem)
+        else:
+            with smtplib.SMTP(servidor, porta, timeout=15) as smtp:
+                smtp.ehlo()
+                smtp.starttls(context=ssl.create_default_context())
+                smtp.ehlo()
+                if usuario:
+                    smtp.login(usuario, senha)
+                smtp.send_message(mensagem)
+        return True
+    except (OSError, smtplib.SMTPException) as erro:
+        app.logger.exception("Falha ao enviar e-mail transacional: %s", type(erro).__name__)
+        return False
+
+
+def _url_email(endpoint, token):
+    base = os.environ.get("DEVSTUDY_PUBLIC_URL")
+    if not base:
+        if request.host.split(":", 1)[0] not in {"localhost", "127.0.0.1"}:
+            raise RuntimeError("Defina DEVSTUDY_PUBLIC_URL com a URL HTTPS pública do DevStudy.")
+        base = request.url_root.rstrip("/")
+    if not base.startswith("https://") and urlsplit(base).hostname not in {"localhost", "127.0.0.1"}:
+        raise RuntimeError("DEVSTUDY_PUBLIC_URL precisa usar HTTPS fora do ambiente local.")
+    return f"{base.rstrip('/')}{url_for(endpoint, token=token)}"
+
+
+def _token_conta(dados, finalidade):
+    return URLSafeTimedSerializer(app.config["SECRET_KEY"]).dumps(dados, salt=f"devstudy-{finalidade}")
 
 
 @app.route("/registrar", methods=["GET", "POST"])
@@ -90,7 +168,7 @@ def registrar():
         return render_template("registrar.html"), 400
     contas = conectar_contas()
     try:
-        cursor = contas.execute("INSERT INTO usuarios (nome, email, senha_hash) VALUES (?, ?, ?)",
+        cursor = contas.execute("INSERT INTO usuarios (nome, email, senha_hash, email_verificado) VALUES (?, ?, ?, 0)",
                                 (nome, email, generate_password_hash(senha)))
         usuario_id = cursor.lastrowid
         contas.commit()
@@ -99,18 +177,51 @@ def registrar():
         return render_template("registrar.html"), 409
     finally:
         contas.close()
-    criar_banco_usuario(usuario_id)
-    token = definir_usuario_banco(usuario_id)
+    dados = {"uid": usuario_id, "email": email}
+    token = _token_conta(dados, "verificacao-email")
+    link = _url_email("verificar_email", token)
+    enviado = _enviar_email(email, "Confirme seu e-mail no DevStudy",
+                            f"Olá, {nome}! Confirme seu endereço para ativar a conta: {link}\n\nO link expira em 24 horas.")
+    if enviado:
+        flash("Conta criada. Confira seu e-mail para confirmar o endereço e entrar.", "sucesso")
+    else:
+        flash("Conta criada, mas o envio do e-mail não está disponível. Configure o SMTP e solicite um novo link.", "erro")
+    return redirect(url_for("login", email=email))
+
+
+@app.route("/verificar-email/<token>", methods=["GET", "POST"])
+def verificar_email(token):
     try:
-        criar_tabelas()
-        popular_conteudo_inicial()
-    finally:
-        restaurar_usuario_banco(token)
-    session.clear()
-    session["usuario_id"] = usuario_id
-    session["usuario_nome"] = nome
-    flash("Conta criada. Seus estudos ficam em um espaço privado.", "sucesso")
-    return redirect(url_for("inicio"))
+        dados = URLSafeTimedSerializer(app.config["SECRET_KEY"]).loads(
+            token, salt="devstudy-verificacao-email", max_age=86400)
+    except (BadSignature, SignatureExpired):
+        flash("Este link de confirmação é inválido ou expirou. Solicite outro.", "erro")
+        return redirect(url_for("reenviar_verificacao"))
+    if request.method == "GET":
+        return render_template("confirmar_email.html", token=token)
+    contas = conectar_contas()
+    cursor = contas.execute("UPDATE usuarios SET email_verificado = 1 WHERE id = ? AND email = ?",
+                            (dados.get("uid"), dados.get("email")))
+    contas.commit()
+    contas.close()
+    flash("E-mail confirmado. Agora você pode entrar.", "sucesso" if cursor.rowcount else "erro")
+    return redirect(url_for("login"))
+
+
+@app.route("/reenviar-verificacao", methods=["GET", "POST"])
+def reenviar_verificacao():
+    if request.method == "GET":
+        return render_template("reenviar_verificacao.html")
+    email = (request.form.get("email") or "").strip().lower()
+    contas = conectar_contas()
+    usuario = contas.execute("SELECT id, nome, email_verificado FROM usuarios WHERE email = ?", (email,)).fetchone()
+    contas.close()
+    if usuario and not usuario["email_verificado"]:
+        token = _token_conta({"uid": usuario["id"], "email": email}, "verificacao-email")
+        link = _url_email("verificar_email", token)
+        _enviar_email(email, "Confirme seu e-mail no DevStudy", f"Olá, {usuario['nome']}! Confirme sua conta: {link}\n\nO link expira em 24 horas.")
+    flash("Se houver uma conta pendente para esse e-mail, enviaremos um novo link.", "sucesso")
+    return redirect(url_for("login"))
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -121,19 +232,73 @@ def login():
     email = (request.form.get("email") or "").strip().lower()
     senha = request.form.get("senha") or ""
     contas = conectar_contas()
-    usuario = contas.execute("SELECT id, nome, senha_hash FROM usuarios WHERE email = ?", (email,)).fetchone()
+    usuario = contas.execute("SELECT id, nome, senha_hash, email_verificado FROM usuarios WHERE email = ?", (email,)).fetchone()
     contas.close()
     if usuario is None or not check_password_hash(usuario["senha_hash"], senha):
         flash("E-mail ou senha incorretos.", "erro")
         return render_template("login.html"), 401
+    if not usuario["email_verificado"]:
+        flash("Confirme seu e-mail antes de entrar. Você pode solicitar outro link.", "erro")
+        return redirect(url_for("reenviar_verificacao"))
     criar_banco_usuario(usuario["id"])
     session.clear()
     session["usuario_id"] = usuario["id"]
     session["usuario_nome"] = usuario["nome"]
     destino = request.args.get("proxima", "")
-    if destino.startswith("/") and not destino.startswith("//"):
+    if destino.startswith("/") and not destino.startswith(("//", "/\\")) and "\\" not in destino and not urlsplit(destino).netloc:
         return redirect(destino)
     return redirect(url_for("inicio"))
+
+
+@app.route("/recuperar-senha", methods=["GET", "POST"])
+def recuperar_senha():
+    if request.method == "GET":
+        return render_template("recuperar_senha.html")
+    email = (request.form.get("email") or "").strip().lower()
+    contas = conectar_contas()
+    usuario = contas.execute("SELECT id, nome, senha_atualizada_em FROM usuarios WHERE email = ? AND email_verificado = 1", (email,)).fetchone()
+    contas.close()
+    if usuario:
+        token = _token_conta({"uid": usuario["id"], "email": email,
+                              "versao_senha": usuario["senha_atualizada_em"]}, "recuperacao-senha")
+        link = _url_email("redefinir_senha", token)
+        _enviar_email(email, "Redefina sua senha do DevStudy", f"Olá, {usuario['nome']}! Use este link em até 30 minutos: {link}")
+    flash("Se existir uma conta confirmada para esse e-mail, enviaremos instruções.", "sucesso")
+    return redirect(url_for("login"))
+
+
+@app.route("/redefinir-senha/<token>", methods=["GET", "POST"])
+def redefinir_senha(token):
+    try:
+        dados = URLSafeTimedSerializer(app.config["SECRET_KEY"]).loads(
+            token, salt="devstudy-recuperacao-senha", max_age=1800)
+    except (BadSignature, SignatureExpired):
+        flash("Este link é inválido ou expirou. Solicite outra recuperação.", "erro")
+        return redirect(url_for("recuperar_senha"))
+    contas = conectar_contas()
+    usuario_atual = contas.execute("SELECT senha_atualizada_em FROM usuarios WHERE id = ? AND email = ? AND email_verificado = 1",
+                                   (dados.get("uid"), dados.get("email"))).fetchone()
+    contas.close()
+    if usuario_atual is None or usuario_atual["senha_atualizada_em"] != dados.get("versao_senha"):
+        flash("Este link já foi usado ou não é mais válido. Solicite outra recuperação.", "erro")
+        return redirect(url_for("recuperar_senha"))
+    if request.method == "GET":
+        return render_template("redefinir_senha.html", token=token)
+    senha = request.form.get("senha") or ""
+    confirmar = request.form.get("confirmar_senha") or ""
+    if len(senha) < 10 or len(senha) > 200 or senha != confirmar:
+        flash("Use uma senha de pelo menos 10 caracteres e confirme-a.", "erro")
+        return render_template("redefinir_senha.html", token=token), 400
+    contas = conectar_contas()
+    atualizado_em = datetime.now(timezone.utc).isoformat()
+    cursor = contas.execute("""UPDATE usuarios SET senha_hash = ?, senha_atualizada_em = ?
+        WHERE id = ? AND email = ? AND email_verificado = 1 AND senha_atualizada_em = ?""",
+        (generate_password_hash(senha), atualizado_em, dados.get("uid"), dados.get("email"), dados.get("versao_senha")))
+    contas.commit()
+    contas.close()
+    flash("Senha atualizada. Entre com sua nova senha." if cursor.rowcount else "Não foi possível atualizar a senha.",
+          "sucesso" if cursor.rowcount else "erro")
+    return redirect(url_for("login"))
 
 
 @app.route("/sair", methods=["POST"])
@@ -141,6 +306,11 @@ def logout():
     session.clear()
     flash("Você saiu da sua conta.", "sucesso")
     return redirect(url_for("login"))
+
+
+@app.route("/health")
+def health():
+    return jsonify(status="ok")
 
 # ==========================================
 # CONFIGURAÇÕES
@@ -425,7 +595,13 @@ def listar_disciplinas():
                 (SELECT COUNT(*) FROM flashcards
                  WHERE flashcards.materia_id = materias.id
                    AND flashcards.proxima_revisao <= date('now', 'localtime'))
-                    AS revisoes_pendentes
+                    AS revisoes_pendentes,
+                (SELECT COUNT(*) FROM materiais_estudo
+                 WHERE materiais_estudo.materia_id = materias.id) AS total_materiais,
+                (SELECT COALESCE(SUM(duracao_minutos), 0) FROM sessoes_estudo
+                 WHERE sessoes_estudo.materia = materias.nome COLLATE NOCASE
+                   AND sessoes_estudo.data_estudo BETWEEN date('now','localtime','-6 days')
+                       AND date('now','localtime')) AS minutos_semana
             FROM materias
             LEFT JOIN (
                 SELECT
@@ -602,6 +778,13 @@ def visualizar_disciplina(materia_id):
                 cursos.id,
                 cursos.titulo,
                 cursos.descricao,
+                (
+                    SELECT modulos_inicio.id
+                    FROM modulos AS modulos_inicio
+                    WHERE modulos_inicio.curso_id = cursos.id
+                    ORDER BY modulos_inicio.ordem, modulos_inicio.id
+                    LIMIT 1
+                ) AS primeiro_modulo_id,
                 COUNT(DISTINCT modulos.id) AS total_modulos,
                 COUNT(DISTINCT aulas.id) AS total_aulas,
                 COUNT(DISTINCT CASE
@@ -767,7 +950,9 @@ def novo_material_estudo(materia_id):
     autor = request.form.get("autor", "").strip()
     licenca = request.form.get("licenca", "").strip()
     modulo_texto = request.form.get("modulo_id", "").strip()
-    validado = 1 if request.form.get("validado") == "on" else 0
+    validado = 1 if request.form.get("validado") == "on" and link else 0
+    fonte_verificada_em = date.today().isoformat() if validado else None
+    status_fonte = "verificada" if validado else "pendente"
     tipos_validos = {"resumo", "explicacao", "exemplo", "referencia"}
 
     if (
@@ -795,14 +980,28 @@ def novo_material_estudo(materia_id):
         conexao.execute("""
             INSERT INTO materiais_estudo
                 (materia_id, modulo_id, titulo, tipo, conteudo, link,
-                 autor, licenca, validado)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 autor, licenca, validado, fonte_verificada_em, status_fonte)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             materia_id, modulo_id, titulo, tipo, conteudo, link,
-            autor, licenca, validado
+            autor, licenca, validado, fonte_verificada_em, status_fonte
         ))
 
     flash("Material adicionado à disciplina.", "sucesso")
+    return redirect(url_for("visualizar_disciplina", materia_id=materia_id) + "#materiais")
+
+
+@app.route("/disciplina/<int:materia_id>/materiais/<int:material_id>/conferir-fonte", methods=["POST"])
+def conferir_fonte_material(materia_id, material_id):
+    with conexao_aberta() as conexao:
+        cursor = conexao.execute("""UPDATE materiais_estudo
+            SET fonte_verificada_em = ?, status_fonte = 'verificada', validado = 1
+            WHERE id = ? AND materia_id = ? AND link != ''""",
+            (date.today().isoformat(), material_id, materia_id))
+        if cursor.rowcount == 0:
+            flash("Adicione um link antes de registrar a conferência da fonte.", "erro")
+            return redirect(url_for("visualizar_disciplina", materia_id=materia_id) + "#materiais")
+    flash("Conferência registrada para hoje. Reavalie o link e os termos de uso periodicamente.", "sucesso")
     return redirect(url_for("visualizar_disciplina", materia_id=materia_id) + "#materiais")
 
 

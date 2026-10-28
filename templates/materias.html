@@ -1,75 +1,115 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Matérias | DevStudy</title>
+    <title>Matérias e assuntos | DevStudy</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
+<body class="pagina-materias">
     <main class="container">
-        <h1>Minhas matérias</h1>
-        <p>Organize seus estudos por assunto.</p>
+        <header class="cabecalho-materias">
+            <div>
+                <p class="sobretitulo-materias">ORGANIZAÇÃO DO APRENDIZADO</p>
+                <h1>Matérias e assuntos</h1>
+                <p>Divida cada matéria em tópicos menores para organizar o que está aprendendo.</p>
+            </div>
+            <a class="botao botao-secundario" href="{{ url_for('inicio') }}">Voltar ao painel</a>
+        </header>
 
-        <p>
-            <a href="{{ url_for('inicio') }}">Voltar à página inicial</a>
-        </p>
+        {% with mensagens = get_flashed_messages(with_categories=true) %}
+            {% if mensagens %}
+                <section class="mensagens-flash" aria-live="polite">
+                    {% for categoria, mensagem in mensagens %}
+                        <div class="mensagem-flash mensagem-{{ categoria }}">{{ mensagem }}</div>
+                    {% endfor %}
+                </section>
+            {% endif %}
+        {% endwith %}
 
         {% if erro %}
-            <p role="alert">{{ erro }}</p>
+            <p class="mensagem-erro" role="alert">{{ erro }}</p>
         {% endif %}
 
-        <section>
-            <h2>Cadastrar nova matéria</h2>
-
-            <form method="POST" action="{{ url_for('gerenciar_materias') }}">
+        <section class="painel painel-nova-materia" aria-labelledby="titulo-nova-materia">
+            <div class="cabecalho-secao">
+                <div>
+                    <h2 id="titulo-nova-materia">Adicionar matéria</h2>
+                    <p>Use uma matéria para agrupar assuntos relacionados.</p>
+                </div>
+            </div>
+            <form method="POST" action="{{ url_for('gerenciar_materias') }}" class="form-materia">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
                 <div>
                     <label for="nome">Nome da matéria</label>
-                    <input
-                        type="text"
-                        id="nome"
-                        name="nome"
-                        maxlength="60"
-                        required
-                        placeholder="Ex.: Inglês"
-                    >
+                    <input type="text" id="nome" name="nome" maxlength="60" required placeholder="Ex.: Inglês">
                 </div>
-
                 <div>
-                    <label for="descricao">Descrição (opcional)</label>
-                    <textarea
-                        id="descricao"
-                        name="descricao"
-                        maxlength="300"
-                        rows="3"
-                        placeholder="O que você pretende estudar?"
-                    ></textarea>
+                    <label for="descricao">Descrição <span>(opcional)</span></label>
+                    <input type="text" id="descricao" name="descricao" maxlength="300" placeholder="O que você pretende estudar?">
                 </div>
-
-                <button type="submit">Cadastrar matéria</button>
+                <button type="submit">Adicionar matéria</button>
             </form>
         </section>
 
-        <section>
-            <h2>Matérias cadastradas</h2>
+        <section aria-labelledby="titulo-lista-materias">
+            <div class="cabecalho-secao">
+                <div>
+                    <h2 id="titulo-lista-materias">Sua organização</h2>
+                    <p>{{ materias|length }} matéria(s) cadastrada(s)</p>
+                </div>
+            </div>
 
             {% if materias %}
-                <ul>
+                <div class="grade-materias">
                     {% for materia in materias %}
-                        <li>
-                            <strong>{{ materia["nome"] }}</strong>
+                        <article class="cartao-materia">
+                            <div class="cabecalho-cartao-materia">
+                                <div>
+                                    <h3>{{ materia["nome"] }}</h3>
+                                    {% if materia["descricao"] %}
+                                        <p>{{ materia["descricao"] }}</p>
+                                    {% else %}
+                                        <p class="texto-secundario">Organize os conteúdos desta matéria por assunto.</p>
+                                    {% endif %}
+                                </div>
+                                <span class="contador-assuntos">{{ materia["assuntos"]|length }} assunto(s)</span>
+                            </div>
 
-                            {% if materia["descricao"] %}
-                                <p>{{ materia["descricao"] }}</p>
-                            {% endif %}
-                        </li>
+                            <div class="lista-assuntos">
+                                {% if materia["assuntos"] %}
+                                    <ul>
+                                        {% for assunto in materia["assuntos"] %}
+                                            <li>
+                                                <span>{{ assunto["nome"] }}</span>
+                                                <form method="POST" action="{{ url_for('excluir_assunto', assunto_id=assunto['id']) }}">
+                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                    <button class="botao-remover-assunto" type="submit" aria-label="Remover {{ assunto['nome'] }}">Remover</button>
+                                                </form>
+                                            </li>
+                                        {% endfor %}
+                                    </ul>
+                                {% else %}
+                                    <p class="estado-vazio-assuntos">Nenhum assunto cadastrado ainda.</p>
+                                {% endif %}
+                            </div>
+
+                            <form class="form-assunto" method="POST" action="{{ url_for('novo_assunto', materia_id=materia['id']) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <label for="assunto-{{ materia['id'] }}">Novo assunto</label>
+                                <div>
+                                    <input type="text" id="assunto-{{ materia['id'] }}" name="nome" maxlength="80" required placeholder="Ex.: Estruturas condicionais">
+                                    <button type="submit">Adicionar</button>
+                                </div>
+                            </form>
+                        </article>
                     {% endfor %}
-                </ul>
+                </div>
             {% else %}
-                <p>Nenhuma matéria cadastrada.</p>
+                <div class="painel estado-vazio-materias">
+                    <h3>Nenhuma matéria por aqui</h3>
+                    <p>Cadastre uma matéria acima para começar a organizar seus assuntos.</p>
+                </div>
             {% endif %}
         </section>
     </main>

@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ disciplina['nome'] }} | DevStudy</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="pagina-disciplina">
+    <main class="container">
+        <a class="voltar-disciplinas" href="{{ url_for('listar_disciplinas') }}">← Minhas disciplinas</a>
+        {% with mensagens = get_flashed_messages(with_categories=true) %}
+            {% if mensagens %}
+                <section class="mensagens-flash" aria-live="polite">
+                    {% for categoria, mensagem in mensagens %}
+                        <div class="mensagem-flash mensagem-{{ categoria }}">{{ mensagem }}</div>
+                    {% endfor %}
+                </section>
+            {% endif %}
+        {% endwith %}
+
+        <header class="cabecalho-disciplina">
+            <div>
+                <p class="sobretitulo-dashboard">{% if disciplina['semestre'] %}{{ disciplina['semestre'] }}º SEMESTRE{% else %}SEMESTRE NÃO DEFINIDO{% endif %}</p>
+                <h1>{{ disciplina['nome'] }}</h1>
+                <p>{{ disciplina['descricao'] or 'Seu ambiente de aprendizagem para esta disciplina.' }}</p>
+            </div>
+            <a class="botao botao-secundario" href="{{ url_for('gerenciar_materias') }}">Gerenciar assuntos</a>
+        </header>
+
+        <section class="painel recomendacao-disciplina" aria-label="Próximo passo recomendado">
+            <div>
+                <span class="selo-estudo">DEVSTUDY INTELLIGENCE</span>
+                <h2>Próximo passo</h2>
+                <p>{{ recomendacao }}</p>
+            </div>
+            <div class="metricas-estudo-disciplina">
+                <div><span>Questões respondidas</span><strong>{{ total_tentativas }}</strong></div>
+                <div><span>Taxa de acerto</span><strong>{% if percentual_acerto is not none %}{{ percentual_acerto }}%{% else %}—{% endif %}</strong></div>
+                <div><span>Revisões pendentes</span><strong>{{ total_cards_pendentes }}</strong></div>
+            </div>
+        </section>
+
+        <div class="grade-ambiente-disciplina">
+            <section class="painel conteudo-disciplina">
+                <div class="cabecalho-secao">
+                    <div>
+                        <h2>Conteúdos e módulos</h2>
+                        <p>A trilha progressiva desta disciplina organiza módulos e atividades em etapas.</p>
+                    </div>
+                </div>
+
+                {% if cursos %}
+                    <div class="lista-cursos-disciplina">
+                        {% for curso in cursos %}
+                            <article class="item-curso-disciplina">
+                                <div>
+                                    <h3>{{ curso['titulo'] }}</h3>
+                                    <p>{{ curso['descricao'] or 'Sem descrição.' }}</p>
+                                    <small>{{ curso['total_modulos'] }} módulo(s) · {{ curso['aulas_concluidas'] }} de {{ curso['total_aulas'] }} aula(s) concluída(s)</small>
+                                </div>
+                                <div class="acoes-curso-disciplina">
+                                    {% if curso['primeiro_modulo_id'] %}
+                                        <a class="botao botao-primario" href="{{ url_for('visualizar_modulo', modulo_id=curso['primeiro_modulo_id']) }}">Começar a estudar</a>
+                                    {% else %}
+                                        <a class="botao botao-primario" href="{{ url_for('visualizar_curso', curso_id=curso['id']) }}">Abrir conteúdo</a>
+                                    {% endif %}
+                                    <a class="link-trilha-disciplina" href="{{ url_for('visualizar_curso', curso_id=curso['id']) }}">Ver trilha e progresso →</a>
+                                </div>
+                            </article>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="estado-vazio-disciplina">
+                        <span aria-hidden="true">▤</span>
+                        <h3>Esta disciplina ainda não tem trilha</h3>
+                        <p>Crie uma trilha de aprendizagem e organize módulos e aulas para acompanhar seu progresso.</p>
+                    </div>
+                {% endif %}
+
+                <details class="adicionar-conteudo-disciplina">
+                    <summary>Adicionar trilha de aprendizagem</summary>
+                    <form method="POST" action="{{ url_for('novo_curso_da_disciplina', materia_id=disciplina['id']) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <label for="curso-titulo">Nome da trilha</label>
+                        <input id="curso-titulo" name="titulo" maxlength="120" required placeholder="Ex.: Fundamentos e conceitos">
+                        <label for="curso-descricao">Descrição <span>(opcional)</span></label>
+                        <textarea id="curso-descricao" name="descricao" maxlength="1000" rows="3" placeholder="Objetivo ou observações"></textarea>
+                        <button type="submit">Criar trilha</button>
+                    </form>
+                </details>
+            </section>
+
+            <aside class="painel resumo-ambiente-disciplina">
+                <h2>Biblioteca relacionada</h2>
+                {% if anotacoes %}
+                    <ul class="lista-relacionada-disciplina">
+                        {% for anotacao in anotacoes %}
+                            <li>
+                                <a href="{{ url_for('editar_anotacao', id=anotacao['id']) }}">{{ anotacao['titulo'] }}</a>
+                                <small>{{ anotacao['assunto_nome'] or anotacao['categoria'] }}</small>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="texto-secundario">As anotações desta disciplina aparecerão aqui quando forem associadas a ela.</p>
+                {% endif %}
+
+                <h2 class="titulo-sessoes-disciplina">Sessões recentes</h2>
+                {% if sessoes %}
+                    <ul class="lista-relacionada-disciplina">
+                        {% for sessao in sessoes %}
+                            <li>
+                                <span>{{ sessao['duracao_minutos'] }} min de estudo</span>
+                                <small>{{ sessao['data_estudo'] }}</small>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="texto-secundario">Ainda não há sessões registradas para esta disciplina.</p>
+                {% endif %}
+            </aside>
+        </div>
+
+        <section class="painel painel-recursos-disciplina" id="materiais">
+            <div class="cabecalho-secao">
+                <div>
+                    <p class="sobretitulo-materias">BIBLIOTECA DE APRENDIZAGEM</p>
+                    <h2>Materiais de estudo</h2>
+                    <p>Estude os guias iniciais e registre referências. Confira autoria, funcionamento e termos antes de marcar a fonte.</p>
+                </div>
+                <span class="contador-recurso">{{ materiais|length }} material(is)</span>
+            </div>
+            {% if materiais %}
+                <div class="lista-materiais-estudo">
+                    {% for material in materiais %}
+                        <article class="cartao-material-estudo">
+                            <div class="topo-recurso-estudo">
+                                <div>
+                                    <span class="etiqueta-recurso">{{ material['tipo']|replace('_', ' ')|title }}</span>
+                                    {% if material['status_fonte'] == 'verificada' %}<span class="etiqueta-validado">Fonte conferida</span>{% else %}<span class="etiqueta-pendente">Conferência pendente</span>{% endif %}
+                                </div>
+                                {% if material['modulo_titulo'] %}<small>{{ material['modulo_titulo'] }}</small>{% endif %}
+                            </div>
+                            <h3>{{ material['titulo'] }}</h3>
+                            <div class="texto-material-estudo">{{ material['conteudo'] }}</div>
+                            {% if material['autor'] or material['licenca'] %}<p class="credito-material-estudo">{% if material['autor'] %}Autor/instituição: {{ material['autor'] }}{% endif %}{% if material['autor'] and material['licenca'] %} · {% endif %}{% if material['licenca'] %}Licença/nota de uso: {{ material['licenca'] }}{% endif %}</p>{% endif %}
+                            {% if material['link'] %}<a href="{{ material['link'] }}" target="_blank" rel="noopener noreferrer">Abrir fonte original ↗</a>{% endif %}
+                            {% if material['fonte_verificada_em'] %}<p class="credito-material-estudo">Última conferência registrada: {{ material['fonte_verificada_em'] }}</p>{% else %}<p class="credito-material-estudo">Esta fonte ainda não foi conferida nesta conta.</p>{% endif %}
+                            {% if material['link'] %}<form method="POST" action="{{ url_for('conferir_fonte_material', materia_id=disciplina['id'], material_id=material['id']) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="botao-remover-recurso" type="submit">Conferi link, autoria e termos hoje</button></form>{% endif %}
+                            <form method="POST" action="{{ url_for('excluir_material_estudo', materia_id=disciplina['id'], material_id=material['id']) }}" onsubmit="return confirm('Remover este material?')">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button class="botao-remover-recurso" type="submit">Remover material</button>
+                            </form>
+                        </article>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="estado-vazio-recursos"><strong>Nenhum material cadastrado.</strong><span>Adicione aqui seu primeiro resumo ou referência de estudo.</span></div>
+            {% endif %}
+            <details class="formulario-recurso-estudo">
+                <summary>Adicionar material de estudo</summary>
+                <form method="POST" action="{{ url_for('novo_material_estudo', materia_id=disciplina['id']) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="campos-recurso-estudo">
+                        <div><label for="material-titulo">Título</label><input id="material-titulo" name="titulo" maxlength="140" required placeholder="Ex.: Introdução a bancos relacionais"></div>
+                        <div><label for="material-tipo">Tipo</label><select id="material-tipo" name="tipo"><option value="resumo">Resumo</option><option value="explicacao">Explicação</option><option value="exemplo">Exemplo</option><option value="referencia">Referência</option></select></div>
+                        <div><label for="material-modulo">Módulo <span>(opcional)</span></label><select id="material-modulo" name="modulo_id"><option value="">Sem módulo específico</option>{% for modulo in modulos %}<option value="{{ modulo['id'] }}">{{ modulo['titulo'] }}</option>{% endfor %}</select></div>
+                        <div class="campo-recurso-largo"><label for="material-conteudo">Conteúdo</label><textarea id="material-conteudo" name="conteudo" rows="7" maxlength="12000" required placeholder="Escreva suas explicações, conceitos e exemplos..."></textarea></div>
+                        <div><label for="material-autor">Autor/professor ou instituição <span>(opcional)</span></label><input id="material-autor" name="autor" maxlength="160" placeholder="Nome do professor ou instituição"></div>
+                        <div><label for="material-licenca">Licença de uso <span>(opcional)</span></label><input id="material-licenca" name="licenca" maxlength="120" placeholder="Ex.: CC BY 4.0 ou todos os direitos reservados"></div>
+                        <div class="campo-recurso-largo"><label for="material-link">Link da fonte original <span>(opcional)</span></label><input id="material-link" name="link" type="url" maxlength="500" placeholder="https://..."></div>
+                        <label class="opcao-validacao"><input type="checkbox" name="validado"> Conferi link, autoria e licença/termos</label>
+                    </div>
+                    <p class="nota-direitos-autorais">Prefira guardar o link original. A data de conferência é registrada quando você confirma autoria, funcionamento do link e termos de uso. Só copie materiais de terceiros quando a licença permitir.</p>
+                    <button type="submit">Salvar material</button>
+                </form>
+            </details>
+        </section>
+
+        <section class="painel painel-recursos-disciplina" id="exercicios">
+            <div class="cabecalho-secao">
+                <div><p class="sobretitulo-materias">PRÁTICA E FEEDBACK</p><h2>Exercícios e gabarito</h2><p>O servidor confere a resposta, registra cada tentativa e calcula seu desempenho nesta disciplina.</p></div>
+                <span class="contador-recurso">{{ questoes|length }} questão(ões) · {{ total_acertos }} acerto(s)</span>
+            </div>
+            {% if questoes %}
+                <div class="lista-questoes-estudo">
+                    {% for questao in questoes %}
+                        <article class="cartao-questao-estudo" id="questao-{{ questao['id'] }}">
+                            <div class="topo-recurso-estudo"><span class="etiqueta-recurso">{% if questao['tipo'] == 'vf' %}Verdadeiro ou falso{% elif questao['tipo'] == 'numerica' %}Resposta numérica{% else %}Múltipla escolha{% endif %} · {{ questao['dificuldade']|title }}</span>{% if questao['modulo_titulo'] %}<small>{{ questao['modulo_titulo'] }}</small>{% endif %}</div>
+                            <h3>{{ loop.index }}. {{ questao['enunciado'] }}</h3>
+                            <form method="POST" action="{{ url_for('responder_questao', materia_id=disciplina['id'], questao_id=questao['id']) }}" class="form-responder-questao">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                {% if questao['tipo'] == 'numerica' %}
+                                    <label for="resposta-{{ questao['id'] }}">Sua resposta</label><input id="resposta-{{ questao['id'] }}" name="resposta" inputmode="decimal" required maxlength="50" placeholder="Ex.: 3,14">
+                                {% else %}
+                                    <fieldset><legend>Sua resposta</legend>{% for alternativa in questao['alternativas_lista'] %}<label class="opcao-questao"><input type="radio" name="resposta" value="{{ loop.index }}" required><span>{{ alternativa }}</span></label>{% endfor %}</fieldset>
+                                {% endif %}
+                                <button type="submit">Responder</button>
+                            </form>
+                            {% if questao['total_tentativas'] %}<p class="resultado-pessoal-questao">{{ questao['total_acertos'] }} acerto(s) em {{ questao['total_tentativas'] }} tentativa(s){% if questao['percentual_acerto'] is not none %} · {{ questao['percentual_acerto'] }}% de acerto{% endif %}</p>{% endif %}
+                            <details class="gabarito-questao" {% if request.args.get('gabarito') == questao['id']|string %}open{% endif %}>
+                                <summary>Ver gabarito e explicação</summary>
+                                <div class="resposta-gabarito"><strong>Resposta: {% if questao['tipo'] == 'numerica' %}{{ questao['resposta_correta'] }}{% else %}{{ questao['alternativas_lista'][questao['resposta_correta']|int - 1] }}{% endif %}</strong>{% if questao['explicacao'] %}<p>{{ questao['explicacao'] }}</p>{% else %}<p>Adicione uma explicação ao cadastrar a questão para registrar o raciocínio.</p>{% endif %}</div>
+                            </details>
+                        </article>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="estado-vazio-recursos"><strong>Ainda não há exercícios.</strong><span>Cadastre questões e guarde o gabarito com a explicação.</span></div>
+            {% endif %}
+            <details class="formulario-recurso-estudo">
+                <summary>Criar exercício</summary>
+                <form method="POST" action="{{ url_for('nova_questao', materia_id=disciplina['id']) }}" id="form-nova-questao">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label for="questao-enunciado">Enunciado</label><textarea id="questao-enunciado" name="enunciado" rows="3" maxlength="3000" required></textarea>
+                    <div class="campos-recurso-estudo">
+                        <div><label for="questao-tipo">Tipo de questão</label><select id="questao-tipo" name="tipo"><option value="multipla_escolha">Múltipla escolha</option><option value="vf">Verdadeiro ou falso</option><option value="numerica">Resposta numérica</option></select></div>
+                        <div><label for="questao-dificuldade">Dificuldade</label><select id="questao-dificuldade" name="dificuldade"><option value="facil">Fácil</option><option value="media" selected>Média</option><option value="dificil">Difícil</option></select></div>
+                        <div><label for="questao-modulo">Módulo <span>(opcional)</span></label><select id="questao-modulo" name="modulo_id"><option value="">Sem módulo específico</option>{% for modulo in modulos %}<option value="{{ modulo['id'] }}">{{ modulo['titulo'] }}</option>{% endfor %}</select></div>
+                    </div>
+                    <fieldset id="alternativas-multipla" class="campo-alternativas-questao"><legend>Alternativas e gabarito</legend>
+                        {% for numero in range(1, 5) %}<label class="linha-alternativa"><input type="radio" name="resposta_correta" value="{{ numero }}" {% if numero == 1 %}checked{% endif %}><input name="alternativa_{{ numero }}" maxlength="300" required placeholder="Alternativa {{ numero }}"></label>{% endfor %}
+                    </fieldset>
+                    <fieldset id="alternativas-vf" class="campo-alternativas-questao" hidden><legend>Gabarito</legend><label class="opcao-questao"><input type="radio" name="resposta_correta" value="1"><span>Verdadeiro</span></label><label class="opcao-questao"><input type="radio" name="resposta_correta" value="2"><span>Falso</span></label></fieldset>
+                    <div id="gabarito-numerico" hidden><label for="resposta-numerica">Resposta numérica correta</label><input id="resposta-numerica" name="resposta_correta" inputmode="decimal" maxlength="50" placeholder="Ex.: 42"></div>
+                    <label for="questao-explicacao">Explicação do gabarito</label><textarea id="questao-explicacao" name="explicacao" rows="3" maxlength="3000" placeholder="Explique por que essa é a resposta correta"></textarea>
+                    <button type="submit">Salvar exercício</button>
+                </form>
+            </details>
+        </section>
+
+        <section class="painel painel-recursos-disciplina" id="revisoes">
+            <div class="cabecalho-secao"><div><p class="sobretitulo-materias">MEMORIZAÇÃO ATIVA</p><h2>Flashcards e revisões</h2><p>Ao lembrar, o intervalo dobra; se não lembrar, o cartão volta para amanhã.</p></div><span class="contador-recurso">{{ total_cards_pendentes }} revisão(ões) hoje</span></div>
+            {% if flashcards %}
+                <div class="grade-flashcards-estudo">
+                    {% for card in flashcards %}
+                        {% set vencido = card['proxima_revisao'] <= today %}
+                        <article class="cartao-flashcard-estudo {% if vencido %}flashcard-vencido{% endif %}">
+                            <span class="etiqueta-recurso">{% if vencido %}Revisão pendente{% else %}Próxima: {{ card['proxima_revisao'] }}{% endif %}</span>
+                            <h3>{{ card['frente'] }}</h3>
+                            <details><summary>Revelar resposta</summary><p>{{ card['verso'] }}</p></details>
+                            {% if vencido %}<form method="POST" action="{{ url_for('revisar_flashcard', materia_id=disciplina['id'], flashcard_id=card['id']) }}" class="acoes-revisao"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button name="lembrou" value="1" type="submit">Lembrei</button><button class="botao-secundario" name="lembrou" value="0" type="submit">Preciso revisar</button></form>{% endif %}
+                        </article>
+                    {% endfor %}
+                </div>
+            {% else %}<div class="estado-vazio-recursos"><strong>Nenhum flashcard ainda.</strong><span>Crie cartões de pergunta e resposta para revisar conceitos.</span></div>{% endif %}
+            <details class="formulario-recurso-estudo"><summary>Criar flashcard</summary><form method="POST" action="{{ url_for('novo_flashcard', materia_id=disciplina['id']) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="campos-recurso-estudo"><div><label for="flashcard-frente">Frente / pergunta</label><textarea id="flashcard-frente" name="frente" rows="3" maxlength="1000" required></textarea></div><div><label for="flashcard-verso">Verso / resposta</label><textarea id="flashcard-verso" name="verso" rows="3" maxlength="3000" required></textarea></div><div><label for="flashcard-modulo">Módulo <span>(opcional)</span></label><select id="flashcard-modulo" name="modulo_id"><option value="">Sem módulo específico</option>{% for modulo in modulos %}<option value="{{ modulo['id'] }}">{{ modulo['titulo'] }}</option>{% endfor %}</select></div></div><button type="submit">Criar flashcard</button></form></details>
+        </section>
+
+        <section class="painel painel-tutor-ia" id="tutor-ia">
+            <div class="tutor-ia-introducao"><span class="icone-tutor-ia" aria-hidden="true">✦</span><div><p class="sobretitulo-materias">APOIO AO APRENDIZADO</p><h2>Tutor de IA</h2><p>Peça uma explicação passo a passo ou outra forma de entender um conceito desta disciplina.</p></div></div>
+            {% if ai_configurada %}
+                <form method="POST" action="{{ url_for('perguntar_tutor_ia', materia_id=disciplina['id']) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label for="pergunta-tutor">Qual é sua dúvida?</label><textarea id="pergunta-tutor" name="pergunta" rows="3" maxlength="2000" required placeholder="Ex.: explique normalização de dados usando um exemplo simples"></textarea><div class="nota-privacidade-ia">Sua pergunta será enviada à API da OpenAI. Não inclua senhas, dados pessoais ou informações sensíveis.</div><button type="submit">Perguntar ao tutor</button></form>
+            {% else %}
+                <div class="configuracao-tutor-pendente"><strong>O tutor está pronto, mas precisa de uma chave de API.</strong><p>Configure <code>OPENAI_API_KEY</code> no ambiente do Windows e reinicie o DevStudy. A chave fica fora dos arquivos do projeto.</p><small>As respostas são apoio ao estudo e devem ser conferidas com suas fontes acadêmicas.</small></div>
+            {% endif %}
+        </section>
+    </main>
+    <script>
+        (() => {
+            const tipo = document.getElementById('questao-tipo');
+            if (!tipo) return;
+            const multipla = document.getElementById('alternativas-multipla');
+            const vf = document.getElementById('alternativas-vf');
+            const numerica = document.getElementById('gabarito-numerico');
+            const atualizar = () => {
+                multipla.hidden = tipo.value !== 'multipla_escolha';
+                vf.hidden = tipo.value !== 'vf';
+                numerica.hidden = tipo.value !== 'numerica';
+                multipla.querySelectorAll('input').forEach((campo) => campo.disabled = tipo.value !== 'multipla_escolha');
+                vf.querySelectorAll('input').forEach((campo) => campo.disabled = tipo.value !== 'vf');
+                numerica.querySelector('input').disabled = tipo.value !== 'numerica';
+            };
+            tipo.addEventListener('change', atualizar);
+            atualizar();
+        })();
+    </script>
+</body>
+</html>
