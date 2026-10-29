@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>{{ modulo.titulo }} | DevStudy</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='pomodoro.css') }}">
 
     <style>
         * {
@@ -161,6 +162,18 @@
             margin: 12px 0 0;
         }
 
+        .resposta-estudante, .avaliacao-exercicio, .videoaulas-modulo {
+            margin: 16px 0;
+            padding: 16px;
+            border: 1px solid #334155;
+            border-radius: 9px;
+            background: #172334;
+        }
+
+        .resposta-estudante textarea { min-height: 90px; }
+        .videoaulas-modulo ul { padding-left: 20px; line-height: 1.9; }
+        .nota-revisao { color: #cbd5e1; font-size: .92rem; }
+
         .adicionar-aula summary {
             color: #bfdbfe;
             font-weight: bold;
@@ -200,9 +213,44 @@
             </p>
 
             <p class="detalhes">
-                Curso: {{ modulo.curso_titulo }}
+                Curso: {{ modulo.curso_titulo }} · Disciplina: {{ modulo.materia_nome }}
             </p>
+            {% if modulo.materia_id %}
+                {% set destino_exercicio = ('#questao-' ~ questao_modulo_id) if questao_modulo_id else '#exercicios' %}
+                <a class="botao" href="{{ url_for('visualizar_disciplina', materia_id=modulo.materia_id) }}{{ destino_exercicio }}">Praticar questão deste módulo →</a>
+            {% endif %}
         </header>
+
+        {% with mensagens = get_flashed_messages(with_categories=true) %}
+            {% if mensagens %}
+                <section class="mensagens" aria-live="polite">
+                    {% for categoria, mensagem in mensagens %}<p>{{ mensagem }}</p>{% endfor %}
+                </section>
+            {% endif %}
+        {% endwith %}
+
+        <div class="videoaulas-modulo" aria-label="Videoaulas públicas deste módulo">
+            <strong>Videoaulas públicas deste módulo</strong>
+            <span class="nota-revisao">Links diretos identificados como curados; buscas temáticas são sugestões automáticas. Confira o conteúdo antes de estudar.</span>
+            <ul>
+                {% for video in videoaulas %}
+                    <li><a href="{{ video.url }}" target="_blank" rel="noopener noreferrer">{{ video.titulo }} · {{ video.canal }}{% if video.origem == 'comunidade' %} · sugestão aprovada{% elif video.curado %} · seleção curada{% else %} · busca temática{% endif %} ↗</a></li>
+                {% endfor %}
+            </ul>
+            <details>
+                <summary>Sugerir uma videoaula pública</summary>
+                <p class="nota-revisao">Envie um link HTTPS relacionado ao assunto. Ele só será mostrado a todos após revisão.</p>
+                <form method="POST" action="{{ url_for('sugerir_videoaula', modulo_id=modulo.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label for="sugestao-video-titulo">Título da aula</label>
+                    <input id="sugestao-video-titulo" name="titulo" maxlength="160" required>
+                    <label for="sugestao-video-url">Link HTTPS</label>
+                    <input id="sugestao-video-url" name="url" type="url" maxlength="1000" placeholder="https://..." required>
+                    <button type="submit">Enviar para revisão</button>
+                </form>
+            </details>
+            {% if moderador_videoaulas %}<p><a href="{{ url_for('curadoria_videoaulas') }}">Revisar sugestões da comunidade →</a></p>{% endif %}
+        </div>
 
         <details class="painel adicionar-aula">
             <summary>Adicionar uma aula própria</summary>
@@ -274,10 +322,14 @@
                                 {% elif bloco.startswith('## ') %}
                                     <h3>{{ bloco[3:] }}</h3>
                                 {% elif bloco.startswith('### Gabarito') or bloco.startswith('### Resolução') %}
-                                    <details class="resolucao-aula">
-                                        <summary>{{ bloco[4:] }} — revelar</summary>
+                                    {% if aula.tentativa_id %}
+                                    <details class="resolucao-aula" {% if aula.tentativa_acertou is none and aula.tentativa_id %}open{% endif %}>
+                                        <summary>{{ bloco[4:] }} — revelar após sua tentativa</summary>
                                         <p>{{ loop.nextitem }}</p>
                                     </details>
+                                    {% else %}
+                                    <p class="nota-revisao">Envie sua tentativa no fim da aula para liberar a resolução comentada.</p>
+                                    {% endif %}
                                     {% set estado.pular_proximo = true %}
                                 {% elif bloco.startswith('### ') %}
                                     <h4>{{ bloco[4:] }}</h4>
@@ -286,6 +338,34 @@
                                 {% endif %}
                             {% endfor %}
                         </div>
+
+                        <section class="resposta-estudante" aria-label="Prática da aula">
+                            <h4>Registre sua tentativa</h4>
+                            <p class="nota-revisao">Escreva seu raciocínio antes de consultar o gabarito. O DevStudy guarda sua resposta e agenda uma revisão conforme sua autoavaliação.</p>
+                            <form method="POST" action="{{ url_for('responder_exercicio_aula', aula_id=aula.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="modulo_id" value="{{ modulo.id }}">
+                                <label for="resposta-aula-{{ aula.id }}">Sua resposta</label>
+                                <textarea id="resposta-aula-{{ aula.id }}" name="resposta" maxlength="5000" required placeholder="Explique como você resolveria o desafio desta aula..."></textarea>
+                                <button type="submit">Registrar tentativa e revelar resolução</button>
+                            </form>
+                            {% if aula.tentativa_id %}<div class="avaliacao-exercicio"><strong>Resposta registrada em {{ aula.tentativa_data }}</strong><p>{{ aula.tentativa_resposta }}</p></div>{% endif %}
+                            {% if aula.tentativas_avaliadas %}<p class="nota-revisao">{{ aula.tentativas_com_acerto }} de {{ aula.tentativas_avaliadas }} autoavaliação(ões) positiva(s) · próxima revisão: {{ aula.tentativa_proxima_revisao or 'sem data' }}</p>{% endif %}
+                            {% if aula.tentativa_id and aula.tentativa_acertou is none %}
+                                <div class="avaliacao-exercicio">
+                                    <strong>Compare sua resposta com a resolução comentada acima.</strong>
+                                    <p>Como foi? Sua avaliação define o intervalo da próxima revisão.</p>
+                                    <form method="POST" action="{{ url_for('avaliar_exercicio_aula', aula_id=aula.id) }}">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <input type="hidden" name="tentativa_id" value="{{ aula.tentativa_id }}">
+                                        <button name="resultado" value="1" type="submit">Consegui explicar</button>
+                                        <button name="resultado" value="0" type="submit" style="background:#b45309">Preciso revisar</button>
+                                    </form>
+                                </div>
+                            {% elif aula.tentativa_acertou is not none %}
+                                <p class="nota-revisao">Última autoavaliação: {% if aula.tentativa_acertou %}consegui explicar{% else %}preciso revisar{% endif %}.</p>
+                            {% endif %}
+                        </section>
 
                         
 <form
@@ -355,5 +435,7 @@
             {% endif %}
         </section>
     </main>
+{% include "_pomodoro_widget.html" %}
+<script src="{{ url_for('static', filename='pomodoro.js') }}" defer></script>
 </body>
 </html>
