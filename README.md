@@ -21,6 +21,7 @@ O **DevStudy** é uma aplicação web desenvolvida em Python com Flask para auxi
 - 🪜 Trilhas de aprendizagem em três etapas com atividades iniciais por disciplina.
 - 📈 Indicadores de minutos estudados na semana, materiais, exercícios e revisões por disciplina.
 - 🧾 Curadoria de fontes com autoria, termos/licença, status e data de conferência registrada.
+- 🎥 Videoaulas públicas por módulo, com recomendações diretas e sugestões da comunidade sujeitas à revisão.
 - 🎯 Metas diárias e metas semanais por matéria.
 - ⏱️ Registro de sessões de estudo.
 - 📊 Dashboard semanal, comparação entre semanas, histórico e calendário.
@@ -104,6 +105,14 @@ Abra no navegador o endereço local indicado pelo Flask no terminal.
 O aplicativo oferece as páginas `/registrar` e `/login`. Cada conta recebe um banco SQLite próprio em `instance/usuarios/`; as credenciais ficam em `instance/contas.db` e as senhas são armazenadas com hash. Novas contas recebem a grade e o pacote inicial de conteúdo. Anotações, tentativas, progresso e materiais adicionados por cada pessoa permanecem separados.
 
 Para colegas acessarem pela internet, publique o Flask em um servidor com HTTPS, defina uma `DEVSTUDY_SECRET_KEY` persistente e forte, mantenha `instance/` em armazenamento persistente e use um servidor WSGI de produção. O servidor local de desenvolvimento não publica o app. A chave da API do tutor, se configurada, é compartilhada pelo servidor e cada usuário tem limite de 10 perguntas por dia; o uso da API pode gerar cobrança.
+
+Para moderar sugestões de videoaulas, configure `DEVSTUDY_MODERADORES` com um ou mais e-mails de contas já cadastradas, separados por vírgulas. Essas contas verão o link “Revisar sugestões da comunidade” nos módulos e poderão aprovar ou rejeitar links antes da publicação para todos.
+
+No Windows PowerShell, por exemplo:
+
+```powershell
+$env:DEVSTUDY_MODERADORES = "seu-email@exemplo.com"
+```
 
 O repositório inclui `render.yaml` como configuração de referência para Render, com Gunicorn, verificação de saúde e disco persistente montado em `/var/data`. A configuração de disco do Render exige um serviço pago e fica limitada a uma instância; revise o plano e o custo na sua conta antes de criar o serviço. A Blueprint não foi publicada nem conectada a uma conta.
 
