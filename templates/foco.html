@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Foco Pomodoro | DevStudy</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='pomodoro.css') }}">
+</head>
+<body>
+<div class="estrutura-dashboard">
+    <main class="pagina-ferramenta">
+        <a class="voltar-painel" href="{{ url_for('inicio') }}">← Voltar ao painel</a>
+        <header class="foco-intro">
+            <p class="sobretitulo-dashboard">SEU ESPAÇO DE CONCENTRAÇÃO</p>
+            <h1>Um bloco de cada vez.</h1>
+            <p>Escolha a matéria, ajuste o tempo e deixe o DevStudy acompanhar sua sessão enquanto você estuda.</p>
+        </header>
+
+        <section class="foco-painel" aria-labelledby="titulo-foco">
+            <div class="foco-painel-cabecalho">
+                <span class="foco-etiqueta"><span aria-hidden="true">●</span> MODO FOCO</span>
+                <span class="foco-ciclo">Trabalho concentrado</span>
+            </div>
+            <form id="form-pomodoro" action="{{ url_for('registrar_estudo') }}" method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="retorno" value="foco">
+                <input type="hidden" name="identificador" id="identificador-sessao">
+                <input type="hidden" name="duracao_minutos" id="duracao-pomodoro" value="25">
+                <label for="materia-pomodoro">Matéria desta sessão</label>
+                <select id="materia-pomodoro" name="materia" required>
+                    <option value="">Selecione uma matéria</option>
+                    {% for materia in materias_cadastradas %}<option value="{{ materia }}">{{ materia }}</option>{% endfor %}
+                </select>
+                <div class="pomodoro-opcoes" role="group" aria-label="Duração do foco">
+                    <button type="button" class="pomodoro-opcao ativa" data-minutos="25">25 min <small>Clássico</small></button>
+                    <button type="button" class="pomodoro-opcao" data-minutos="45">45 min <small>Profundo</small></button>
+                    <button type="button" class="pomodoro-opcao" data-minutos="50">50 min <small>Estendido</small></button>
+                </div>
+                <div class="pomodoro-anel" id="pomodoro-anel">
+                    <div class="pomodoro-anel-centro">
+                        <span id="visor-pomodoro" role="timer" aria-live="off">25:00</span>
+                        <small id="status-pomodoro">PRONTO PARA COMEÇAR</small>
+                    </div>
+                </div>
+                <div class="botoes-pomodoro">
+                    <button type="button" class="botao-foco-principal" id="botao-iniciar-pomodoro">Iniciar foco <span aria-hidden="true">→</span></button>
+                    <button type="button" class="botao-foco-secundario" id="botao-pausar-pomodoro">Pausar</button>
+                    <button type="button" class="botao-foco-secundario" id="botao-reiniciar-pomodoro">Reiniciar</button>
+                </div>
+            </form>
+            <p class="foco-nota"><span aria-hidden="true">✓</span> A contagem continua se você trocar de página ou minimizar a janela. Ao terminar, o tempo é salvo no seu histórico.</p>
+        </section>
+    </main>
+</div>
+{% include "_pomodoro_widget.html" %}
+<script src="{{ url_for('static', filename='pomodoro.js') }}" defer></script>
+</body>
+</html>
