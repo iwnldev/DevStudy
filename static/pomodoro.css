@@ -1,0 +1,110 @@
+.cartao-estatistica::after {
+    background: linear-gradient(90deg, var(--painel-acento), transparent);
+}
+
+.atalho-progresso {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 17px 20px;
+    border: 1px solid var(--painel-borda);
+    border-radius: 15px;
+    background: linear-gradient(110deg, rgba(255, 113, 56, .09), rgba(255,255,255,.018));
+    color: var(--painel-texto);
+    text-decoration: none;
+    transition: border-color .18s ease, transform .18s ease;
+}
+.atalho-progresso:hover { border-color: rgba(255, 113, 56, .35); color: white; transform: translateY(-1px); }
+.atalho-progresso > span:nth-child(2) { display: grid; gap: 4px; }
+.atalho-progresso small { color: var(--painel-muted); font-size: .8rem; }
+.atalho-progresso-icone { display: grid; width: 42px; height: 42px; flex: 0 0 42px; place-items: center; border-radius: 12px; background: rgba(255,113,56,.13); color: var(--painel-acento-claro); font-size: 1.2rem; }
+.atalho-progresso-acao { margin-left: auto; color: var(--painel-acento-claro); font-size: .82rem; font-weight: 750; white-space: nowrap; }
+
+.pomodoro-flutuante {
+    position: fixed;
+    z-index: 1000;
+    right: 22px;
+    bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    width: min(430px, calc(100vw - 28px));
+    padding: 12px 14px;
+    border: 1px solid rgba(255, 113, 56, .35);
+    border-radius: 16px;
+    background: rgba(35, 28, 24, .97);
+    color: #f5eee9;
+    box-shadow: 0 14px 44px rgba(0,0,0,.38);
+    backdrop-filter: blur(16px);
+}
+.pomodoro-flutuante[hidden] { display: none; }
+.pomodoro-flutuante-sinal { width: 9px; height: 9px; flex: 0 0 9px; border-radius: 50%; background: #ff7138; box-shadow: 0 0 0 5px rgba(255,113,56,.12); }
+.pomodoro-flutuante-info { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.pomodoro-flutuante-info strong { font-size: .8rem; }
+.pomodoro-flutuante-info span { overflow: hidden; color: #b9ada5; font-size: .7rem; text-overflow: ellipsis; white-space: nowrap; }
+.pomodoro-flutuante output { color: #ff9a57; font-size: 1.2rem; font-variant-numeric: tabular-nums; font-weight: 800; }
+.pomodoro-flutuante button { width: 34px; height: 34px; border: 1px solid rgba(255,255,255,.1); border-radius: 10px; background: rgba(255,255,255,.06); color: #f5eee9; cursor: pointer; }
+.pomodoro-flutuante a { color: #ff9a57; font-size: .75rem; font-weight: 750; text-decoration: none; }
+
+.pagina-ferramenta { width: min(860px, 100%); margin: 0 auto; padding: 34px 22px 70px; }
+.voltar-painel { display: inline-flex; margin-bottom: 26px; color: #c4b8b0; font-size: .88rem; text-decoration: none; }
+.voltar-painel:hover { color: #ff9a57; }
+.foco-intro { margin-bottom: 24px; }
+.foco-intro h1 { margin: 0 0 8px; color: var(--painel-texto); font-size: clamp(2rem, 5vw, 3rem); letter-spacing: -.055em; }
+.foco-intro > p:last-child { max-width: 620px; color: var(--painel-muted); }
+.foco-painel { max-width: 610px; margin: 0 auto; padding: clamp(22px, 5vw, 38px); border: 1px solid rgba(255,113,56,.2); border-radius: 22px; background: radial-gradient(ellipse at 50% 28%, rgba(255,113,56,.1), transparent 48%), linear-gradient(145deg,#251e1a,#1d1917); box-shadow: 0 24px 65px rgba(0,0,0,.24); }
+.foco-painel-cabecalho { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 26px; }
+.foco-etiqueta { color: #ff9a57; font-size: .69rem; font-weight: 800; letter-spacing: .13em; }
+.foco-etiqueta span { margin-right: 5px; font-size: .6rem; }
+.foco-ciclo { color: #9d9189; font-size: .76rem; }
+.foco-painel label { display: block; margin-bottom: 7px; color: #d8cec7; font-size: .8rem; font-weight: 700; }
+.foco-painel select { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid rgba(255,255,255,.12); border-radius: 10px; background: #181513; color: #f5eee9; }
+.pomodoro-opcoes { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin: 15px 0 7px; }
+.pomodoro-opcao { display: grid; gap: 4px; padding: 10px 8px; border: 1px solid rgba(255,255,255,.08); border-radius: 10px; background: rgba(255,255,255,.025); color: #e8ded7; font-size: .8rem; font-weight: 750; cursor: pointer; }
+.pomodoro-opcao small { color: #968a82; font-size: .67rem; font-weight: 500; }
+.pomodoro-opcao.ativa { border-color: rgba(255,113,56,.45); background: rgba(255,113,56,.1); color: #ffad7d; }
+.pomodoro-anel { display: grid; width: min(290px, 70vw); aspect-ratio: 1; place-items: center; margin: 22px auto; border-radius: 50%; background: conic-gradient(#ff7138 0deg, #ff9a57 var(--angulo, 360deg), rgba(255,255,255,.07) var(--angulo, 360deg)); box-shadow: 0 0 50px rgba(255,113,56,.08); transition: background .35s linear; }
+.pomodoro-anel-centro { display: grid; align-content: center; justify-items: center; gap: 7px; width: calc(100% - 12px); aspect-ratio: 1; border-radius: 50%; background: #201b18; }
+.pomodoro-anel-centro span { color: #fff4ec; font-size: clamp(3.2rem, 12vw, 4.5rem); font-variant-numeric: tabular-nums; font-weight: 800; letter-spacing: -.07em; }
+.pomodoro-anel-centro small { color: #a69a92; font-size: .65rem; font-weight: 800; letter-spacing: .13em; }
+.botoes-pomodoro { display: flex; justify-content: center; flex-wrap: wrap; gap: 9px; }
+.botoes-pomodoro button { min-height: 42px; padding: 10px 15px; border: 1px solid rgba(255,255,255,.1); border-radius: 10px; background: rgba(255,255,255,.04); color: #f5eee9; font-weight: 750; cursor: pointer; }
+.botoes-pomodoro .botao-foco-principal { border-color: transparent; background: linear-gradient(110deg,#f2602f,#ff9144); color: #21130d; }
+.botao-foco-principal span { margin-left: 8px; }
+.foco-nota { display: flex; gap: 8px; align-items: flex-start; margin: 20px 0 0; color: #a99d95; font-size: .75rem; line-height: 1.5; }
+.foco-nota span { color: #ff9a57; }
+
+.pagina-progresso { width: min(1040px, 100%); }
+.progresso-resumo { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; margin: 26px 0 16px; }
+.progresso-resumo article,.progresso-grafico,.progresso-comparativo article { border: 1px solid var(--painel-borda); border-radius: 16px; background: linear-gradient(145deg,#25201d,#1e1a17); }
+.progresso-resumo article { display: grid; gap: 7px; padding: 19px; }
+.progresso-resumo span,.progresso-resumo small,.progresso-comparativo small { color: #aa9f98; font-size: .76rem; }
+.progresso-resumo strong { color: #f5eee9; font-size: 1.55rem; }
+.progresso-resumo strong small { font-size: .85rem; }
+.progresso-grafico { padding: clamp(19px,3vw,30px); }
+.progresso-grafico-topo { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; }
+.progresso-grafico-topo h2 { margin: 0; color: #f5eee9; }
+.progresso-grafico-topo p:last-child { margin: 5px 0 0; color: #aa9f98; font-size: .82rem; }
+.progresso-grafico-topo > a { color: #ff9a66; font-size: .82rem; font-weight: 750; text-decoration: none; white-space: nowrap; }
+.grafico-semanal-detalhado { height: 255px; gap: 20px; margin: 26px 0 0; padding: 15px 5px 0; border-top: 1px solid rgba(255,255,255,.08); background: transparent; }
+.grafico-semanal-detalhado .trilho-dia-semana { width: min(100%,52px); background: rgba(255,255,255,.055); }
+.grafico-semanal-detalhado .trilho-dia-semana > span { min-height: 4px; }
+.grafico-semanal-detalhado .valor-dia-semana,.grafico-semanal-detalhado .rotulo-dia-semana { color: #b8aea7; font-size: .78rem; }
+.progresso-comparativo { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin-top: 15px; }
+.progresso-comparativo article { display: grid; align-content: start; gap: 8px; padding: 18px; background: rgba(255,255,255,.025); }
+.progresso-comparativo strong { color: #f5eee9; font-size: 1.3rem; overflow-wrap: anywhere; }
+.progresso-comparativo p { margin: 2px 0 0; }
+
+@media (max-width: 600px) {
+    .pomodoro-flutuante { right: 12px; bottom: 12px; gap: 9px; padding: 10px 11px; }
+    .pomodoro-flutuante-info span { max-width: 135px; }
+    .pomodoro-flutuante output { font-size: 1.05rem; }
+    .atalho-progresso { align-items: flex-start; }
+    .atalho-progresso-acao { display: none; }
+    .progresso-resumo { grid-template-columns: 1fr; }
+    .progresso-resumo article { grid-template-columns: 1fr auto; align-items: baseline; }
+    .progresso-resumo small { grid-column: 1 / -1; }
+    .grafico-semanal-detalhado { gap: 7px; height: 205px; }
+    .progresso-comparativo { grid-template-columns: 1fr; }
+    .progresso-grafico-topo { align-items: flex-start; flex-direction: column; }
+}
