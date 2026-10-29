@@ -1,0 +1,16 @@
+<aside class="pomodoro-flutuante" id="pomodoro-flutuante" hidden aria-live="polite">
+    <div class="pomodoro-flutuante-sinal" aria-hidden="true"></div>
+    <div class="pomodoro-flutuante-info">
+        <strong>Foco em andamento</strong>
+        <span id="pomodoro-flutuante-materia">Sua sessão continua ativa</span>
+    </div>
+    <output id="pomodoro-flutuante-tempo" role="timer">25:00</output>
+    <button type="button" id="pomodoro-flutuante-controle" aria-label="Pausar sessão">Ⅱ</button>
+    <a href="{{ url_for('foco') }}" aria-label="Abrir Pomodoro">Abrir</a>
+    <form id="pomodoro-salvar-form" action="{{ url_for('registrar_estudo') }}" method="post" hidden>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="identificador" id="pomodoro-salvar-id">
+        <input type="hidden" name="materia" id="pomodoro-salvar-materia">
+        <input type="hidden" name="duracao_minutos" id="pomodoro-salvar-duracao">
+    </form>
+</aside>
