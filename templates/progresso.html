@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Meu progresso | DevStudy</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='pomodoro.css') }}">
+</head>
+<body>
+<div class="estrutura-dashboard">
+    <main class="pagina-ferramenta pagina-progresso">
+        <a class="voltar-painel" href="{{ url_for('inicio') }}">← Voltar ao painel</a>
+        <header class="foco-intro">
+            <p class="sobretitulo-dashboard">SEU RITMO DE APRENDIZAGEM</p>
+            <h1>Progresso com clareza.</h1>
+            <p>Entenda sua constância, compare períodos e veja onde seu tempo de estudo está sendo investido.</p>
+        </header>
+        <section class="progresso-resumo">
+            <article><span>Últimos 7 dias</span><strong>{{ minutos_semana // 60 }}h {{ minutos_semana % 60 }}min</strong><small>tempo registrado</small></article>
+            <article><span>Dias ativos</span><strong>{{ dias_ativos }} <small>/ 7</small></strong><small>com pelo menos uma sessão</small></article>
+            <article><span>Tempo total</span><strong>{{ total_geral // 60 }}h {{ total_geral % 60 }}min</strong><small>{{ sessoes_total }} sessões registradas</small></article>
+        </section>
+        <section class="progresso-grafico" aria-labelledby="titulo-grafico">
+            <div class="progresso-grafico-topo"><div><p class="sobretitulo-dashboard">CONSTÂNCIA</p><h2 id="titulo-grafico">Atividade diária</h2><p>Minutos de estudo nos últimos sete dias</p></div><a href="{{ url_for('historico') }}">Abrir histórico →</a></div>
+            <div class="grafico-semanal grafico-semanal-detalhado" role="img" aria-label="Minutos de estudo por dia nos últimos sete dias">
+                {% for dia in estudo_semana %}
+                <div class="coluna-dia-semana" aria-label="{{ dia['rotulo'] }}: {{ dia['minutos'] }} minutos">
+                    <span class="valor-dia-semana">{% if dia['minutos'] %}{{ dia['minutos'] }}{% else %}—{% endif %}</span>
+                    <div class="trilho-dia-semana"><span style="height: {{ dia['percentual'] }}%"></span></div>
+                    <span class="rotulo-dia-semana">{{ dia['rotulo'] }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="progresso-comparativo">
+                <article><span class="rotulo-tendencia">Esta semana até hoje</span><strong>{{ minutos_atual // 60 }}h {{ minutos_atual % 60 }}min</strong><small>Mesmo período na semana passada: {{ minutos_anterior // 60 }}h {{ minutos_anterior % 60 }}min</small>
+                    {% if minutos_anterior %}<p class="variacao-semanal {% if diferenca > 0 %}variacao-alta{% elif diferenca < 0 %}variacao-queda{% else %}variacao-estavel{% endif %}">{% if diferenca > 0 %}↑{% elif diferenca < 0 %}↓{% else %}→{% endif %} {{ diferenca|abs }} min ({% if variacao is not none %}{{ variacao|abs }}%{% else %}0%{% endif %}) {% if diferenca > 0 %}a mais{% elif diferenca < 0 %}a menos{% else %}sem alteração{% endif %}</p>
+                    {% elif minutos_atual %}<p class="variacao-semanal variacao-alta">Você já registrou {{ minutos_atual }} min nesta semana.</p>{% else %}<p class="variacao-semanal variacao-estavel">Nenhuma sessão registrada neste período.</p>{% endif %}
+                </article>
+                <article><span class="rotulo-tendencia">Matéria em destaque</span>{% if materia_destaque %}<strong>{{ materia_destaque['materia'] }}</strong><small>{{ materia_destaque['minutos'] // 60 }}h {{ materia_destaque['minutos'] % 60 }}min nesta semana</small>{% else %}<strong>Sem dados ainda</strong><small>Registre uma sessão para ver sua matéria em destaque.</small>{% endif %}</article>
+            </div>
+        </section>
+    </main>
+</div>
+{% include "_pomodoro_widget.html" %}
+<script src="{{ url_for('static', filename='pomodoro.js') }}" defer></script>
+</body>
+</html>
