@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Revisões de hoje | DevStudy</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        body{background:#f4f7fb}.pagina-revisoes{max-width:1000px;margin:40px auto;padding:0 20px;color:#172033}
+        .cabecalho-revisoes,.cartao-revisao{background:white;border:1px solid #dfe6ef;border-radius:16px;padding:24px;margin-bottom:18px;box-shadow:0 8px 24px #1b31500a}
+        .cabecalho-revisoes a{color:#2459a6}.cartao-revisao h2{font-size:1.1rem;line-height:1.5}.meta-revisao{color:#64748b;font-size:.9rem}
+        .alternativa-revisao{display:block;padding:10px;border:1px solid #e2e8f0;border-radius:9px;margin:8px 0}.resposta-revisao{background:#eff6ff;padding:16px;border-radius:10px;margin-top:14px}
+        .vazio-revisoes{padding:30px;background:white;border-radius:14px;text-align:center}
+        .cartao-revisao input[type=text],.cartao-revisao input[inputmode=decimal]{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:8px;margin:8px 0 12px}
+        @media(max-width:600px){.pagina-revisoes{margin:20px auto;padding:0 12px}.cabecalho-revisoes,.cartao-revisao{padding:17px}}
+    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='pomodoro.css') }}">
+</head>
+<body>
+<main class="pagina-revisoes">
+    <header class="cabecalho-revisoes">
+        <a href="{{ url_for('listar_disciplinas') }}">← Voltar às disciplinas</a>
+        {% with mensagens = get_flashed_messages(with_categories=true) %}
+            {% if mensagens %}<div aria-live="polite">{% for categoria, mensagem in mensagens %}<p class="resposta-revisao">{{ mensagem }}</p>{% endfor %}</div>{% endif %}
+        {% endwith %}
+        <p class="sobretitulo-dashboard">PRÁTICA DE RECUPERAÇÃO</p>
+        <h1>Revisões para hoje</h1>
+        <p>Questões novas, exercícios de aula vencidos e flashcards pendentes aparecem aqui. A fila mostra até 12 questões por rodada. Acertos voltam em intervalos maiores e itens marcados para reforço retornam amanhã.</p>
+        {% if materia_id %}<p><a href="{{ url_for('revisar_questoes') }}">Ver todas as disciplinas</a></p>{% endif %}
+    </header>
+    {% if aulas_pendentes %}
+        <section class="cabecalho-revisoes">
+            <h2>Exercícios de aula para reforçar</h2>
+            {% for aula in aulas_pendentes %}
+                <article class="alternativa-revisao">
+                    <strong>{{ aula.materia_nome }} · {{ aula.modulo_titulo }}</strong><br>
+                    {{ aula.aula_titulo }} · próxima revisão {{ aula.proxima_revisao }}
+                    <a href="{{ url_for('visualizar_modulo', modulo_id=aula.modulo_id) }}#aula-{{ aula.aula_id }}">Abrir aula e tentar novamente →</a>
+                </article>
+            {% endfor %}
+        </section>
+    {% endif %}
+    {% if flashcards %}
+        <section class="cabecalho-revisoes">
+            <h2>Flashcards para revisar</h2>
+            {% for card in flashcards %}
+                <article class="alternativa-revisao">
+                    <strong>{{ card.materia_nome }}{% if card.modulo_titulo %} · {{ card.modulo_titulo }}{% endif %}</strong>
+                    <h3>{{ card.frente }}</h3>
+                    <details><summary>Revelar resposta</summary><p>{{ card.verso }}</p></details>
+                    <form method="POST" action="{{ url_for('revisar_flashcard', materia_id=card.materia_id, flashcard_id=card.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="origem" value="revisoes"><input type="hidden" name="materia_filtro" value="{{ materia_id or '' }}">
+                        <button name="lembrou" value="1" type="submit">Lembrei</button>
+                        <button name="lembrou" value="0" type="submit">Preciso revisar</button>
+                    </form>
+                </article>
+            {% endfor %}
+        </section>
+    {% endif %}
+    {% if questoes %}
+        {% for questao in questoes %}
+            <article class="cartao-revisao" id="questao-{{ questao.id }}">
+                <p class="meta-revisao">{{ questao.materia_nome }}{% if questao.modulo_titulo %} · {{ questao.modulo_titulo }}{% endif %} · {{ questao.dificuldade|title }}</p>
+                <h2>{{ questao.enunciado }}</h2>
+                {% if questao.dica %}<details><summary>Precisa de uma dica?</summary><p>{{ questao.dica }}</p></details>{% endif %}
+                {% if questao.tipo == 'numerica' %}
+                    <form method="POST" action="{{ url_for('responder_questao', materia_id=questao.materia_id, questao_id=questao.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="origem" value="revisoes"><input type="hidden" name="materia_filtro" value="{{ materia_id or '' }}">
+                        <label for="resposta-{{ questao.id }}">Sua resposta</label><input id="resposta-{{ questao.id }}" name="resposta" inputmode="decimal" maxlength="50" required placeholder="Ex.: 42"><button type="submit">Responder</button>
+                    </form>
+                {% else %}
+                    <form method="POST" action="{{ url_for('responder_questao', materia_id=questao.materia_id, questao_id=questao.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="origem" value="revisoes"><input type="hidden" name="materia_filtro" value="{{ materia_id or '' }}">
+                        <fieldset><legend>Sua resposta</legend>
+                            {% for alternativa in questao.alternativas_lista %}<label class="alternativa-revisao"><input type="radio" name="resposta" value="{{ loop.index }}" required> {{ alternativa }}</label>{% endfor %}
+                        </fieldset><button type="submit">Responder</button>
+                    </form>
+                {% endif %}
+                {% if gabarito_id == questao.id %}
+                    <div class="resposta-revisao" role="status">
+                        <strong>Gabarito: {% if questao.tipo == 'numerica' %}{{ questao.resposta_correta }}{% else %}{{ questao.alternativas_lista[questao.resposta_correta|int - 1] }}{% endif %}</strong>
+                        {% if questao.explicacao %}<p>{{ questao.explicacao }}</p>{% endif %}
+                        <p class="meta-revisao">Sua resposta foi registrada. A próxima revisão foi programada conforme o resultado.</p>
+                    </div>
+                {% else %}<p class="meta-revisao">O gabarito aparece depois da tentativa.</p>{% endif %}
+            </article>
+        {% endfor %}
+    {% elif not aulas_pendentes and not flashcards %}
+        <section class="vazio-revisoes"><h2>Você está em dia!</h2><p>Não há questões novas ou vencidas para revisar. Continue avançando nas aulas e exercícios.</p></section>
+    {% endif %}
+</main>
+{% include "_pomodoro_widget.html" %}
+<script src="{{ url_for('static', filename='pomodoro.js') }}" defer></script>
+</body>
+</html>
