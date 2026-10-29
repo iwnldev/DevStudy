@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>{{ curso.titulo }} | DevStudy</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='pomodoro.css') }}">
 
     <style>
         * {
@@ -433,5 +434,7 @@
         </section>
 
     </main>
+{% include "_pomodoro_widget.html" %}
+<script src="{{ url_for('static', filename='pomodoro.js') }}" defer></script>
 </body>
 </html>
