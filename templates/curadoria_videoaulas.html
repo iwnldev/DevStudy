@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Revisar videoaulas | DevStudy</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .curadoria { max-width: 920px; margin: 36px auto; padding: 24px; }
+        .sugestao-video { margin: 16px 0; padding: 20px; border: 1px solid #334155; border-radius: 12px; }
+        .sugestao-video form { display: inline-block; margin: 12px 10px 0 0; }
+        .sugestao-video a { overflow-wrap: anywhere; }
+    </style>
+</head>
+<body>
+<main class="curadoria">
+    <a href="{{ url_for('inicio') }}">← Voltar ao painel</a>
+    <h1>Revisar sugestões de videoaulas</h1>
+    <p>Confira se o link é público, seguro e corresponde ao módulo antes de publicar.</p>
+    {% with mensagens = get_flashed_messages(with_categories=true) %}
+        {% for categoria, mensagem in mensagens %}<p class="mensagens {{ categoria }}" role="status">{{ mensagem }}</p>{% endfor %}
+    {% endwith %}
+    {% for sugestao in sugestoes %}
+        <article class="sugestao-video">
+            <h2>{{ sugestao.titulo }}</h2>
+            <p><strong>{{ sugestao.disciplina }} · {{ sugestao.modulo }}</strong></p>
+            <p><a href="{{ sugestao.url }}" target="_blank" rel="noopener noreferrer">{{ sugestao.url }} ↗</a></p>
+            <small>Enviada por {{ sugestao.autor }} em {{ sugestao.criada_em }}</small>
+            <div>
+                {% for acao, rotulo in [('aprovar', 'Aprovar e publicar'), ('rejeitar', 'Rejeitar')] %}
+                    <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="sugestao_id" value="{{ sugestao.id }}">
+                        <button type="submit" name="acao" value="{{ acao }}">{{ rotulo }}</button>
+                    </form>
+                {% endfor %}
+            </div>
+        </article>
+    {% else %}
+        <p>Não há sugestões aguardando revisão.</p>
+    {% endfor %}
+</main>
+</body>
+</html>
