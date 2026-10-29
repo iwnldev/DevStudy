@@ -11,6 +11,7 @@
         rel="stylesheet"
         href="{{ url_for('static', filename='style.css') }}"
     >
+    <link rel="stylesheet" href="{{ url_for('static', filename='pomodoro.css') }}">
 </head>
 
 <body>
@@ -409,5 +410,7 @@
         <p>DevStudy — Aprender, praticar e evoluir.</p>
     </footer>
 
+{% include "_pomodoro_widget.html" %}
+<script src="{{ url_for('static', filename='pomodoro.js') }}" defer></script>
 </body>
 </html>
