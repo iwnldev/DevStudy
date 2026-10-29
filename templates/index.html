@@ -5,12 +5,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>DevStudy | Painel de estudos</title>
+    <title>DevStudy | {{ {'painel': 'Painel de estudos', 'organizacao': 'Organização dos estudos', 'biblioteca': 'Biblioteca'}[pagina] }}</title>
 
     <link
         rel="stylesheet"
         href="{{ url_for('static', filename='style.css') }}"
     >
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='pomodoro.css') }}">
 </head>
 
 <body>
@@ -19,68 +21,47 @@
 <div class="estrutura-dashboard">
 
     <aside class="barra-lateral">
-        <a href="{{ url_for('inicio') }}" class="marca-devstudy">
+        <a href="{{ url_for('inicio') }}" class="marca-devstudy" aria-label="DevStudy — voltar à visão geral">
             <span class="marca-icone">D</span>
             <span>DevStudy</span>
         </a>
 
-        <p class="rotulo-navegacao">ESPAÇO DE ESTUDOS</p>
+        <section class="grupo-navegacao">
+            <p class="rotulo-navegacao">INÍCIO</p>
+            <nav class="navegacao-principal" aria-label="Navegação principal">
+                <a class="{% if pagina == 'painel' %}link-navegacao-ativo{% endif %}" href="{{ url_for('inicio') }}"><span aria-hidden="true">▦</span>Visão geral</a>
+            </nav>
+        </section>
 
-        <nav class="navegacao-principal" aria-label="Navegação principal">
-            <a href="#painel">
-                <span aria-hidden="true">▦</span>
-                Visão geral
-            </a>
+        <section class="grupo-navegacao">
+            <p class="rotulo-navegacao">APRENDER</p>
+            <nav class="navegacao-principal" aria-label="Aprendizagem">
+                <a class="{% if request.endpoint == 'listar_disciplinas' %}link-navegacao-ativo{% endif %}" href="{{ url_for('listar_disciplinas') }}"><span aria-hidden="true">▤</span>Minhas matérias</a>
+                <a class="{% if request.endpoint == 'progresso' %}link-navegacao-ativo{% endif %}" href="{{ url_for('progresso') }}"><span aria-hidden="true">▣</span>Meu progresso</a>
+                <a class="{% if request.endpoint == 'revisar_questoes' %}link-navegacao-ativo{% endif %}" href="{{ url_for('revisar_questoes') }}"><span aria-hidden="true">✓</span>Revisões e exercícios</a>
+            </nav>
+        </section>
 
-            <a href="#pomodoro">
-                <span aria-hidden="true">◷</span>
-                Pomodoro
-            </a>
+        <section class="grupo-navegacao">
+            <p class="rotulo-navegacao">ORGANIZAÇÃO</p>
+            <nav class="navegacao-principal" aria-label="Organização dos estudos">
+                <a class="{% if request.endpoint == 'foco' %}link-navegacao-ativo{% endif %}" href="{{ url_for('foco') }}"><span aria-hidden="true">◷</span>Foco Pomodoro</a>
+                <a class="{% if pagina == 'organizacao' %}link-navegacao-ativo{% endif %}" href="{{ url_for('organizacao') }}"><span aria-hidden="true">◎</span>Metas de estudo</a>
+                <a class="{% if request.endpoint == 'historico' %}link-navegacao-ativo{% endif %}" href="{{ url_for('historico') }}"><span aria-hidden="true">↗</span>Histórico</a>
+                <a class="{% if request.endpoint == 'calendario' %}link-navegacao-ativo{% endif %}" href="{{ url_for('calendario') }}"><span aria-hidden="true">▦</span>Calendário</a>
+            </nav>
+        </section>
 
-            <a href="#meta">
-                <span aria-hidden="true">◎</span>
-                Meta diária
-            </a>
-
-            <a href="#nova-anotacao">
-                <span aria-hidden="true">＋</span>
-                Nova anotação
-            </a>
-
-            <a href="#biblioteca">
-                <span aria-hidden="true">▤</span>
-                Biblioteca
-            </a>
-
-            <a href="#progresso-cursos">
-                <span aria-hidden="true">▣</span>
-                Trilhas de estudo
-            </a>
-
-            <a href="{{ url_for('listar_disciplinas') }}">
-                <span aria-hidden="true">▦</span>
-                Minhas disciplinas
-            </a>
-
-            <a href="#metas-materias">
-                <span aria-hidden="true">◎</span>
-                Metas semanais
-            </a>
-
-            <a href="{{ url_for('historico') }}">
-                <span aria-hidden="true">↗</span>
-                Histórico de estudos
-            </a>
-
-            <a href="{{ url_for('calendario') }}">
-                <span aria-hidden="true">📅</span>
-                Calendário
-            </a>
-        </nav>
+        <section class="grupo-navegacao">
+            <p class="rotulo-navegacao">BIBLIOTECA</p>
+            <nav class="navegacao-principal" aria-label="Biblioteca de estudos">
+                <a class="{% if pagina == 'biblioteca' %}link-navegacao-ativo{% endif %}" href="{{ url_for('biblioteca') }}"><span aria-hidden="true">▤</span>Biblioteca e anotações</a>
+            </nav>
+        </section>
 
         <div class="lateral-rodape">
-            <span class="indicador-status" aria-hidden="true"></span>
-            <span>{{ session.get('usuario_nome', 'Seu espaço de evolução') }}</span>
+            <span class="avatar-lateral" aria-hidden="true">{{ (session.get('usuario_nome') or 'D')[:1]|upper }}</span>
+            <span class="identidade-lateral"><small>SEU ESPAÇO</small><strong>{{ session.get('usuario_nome', 'Estudante') }}</strong></span>
             {% if session.get('usuario_id') %}<form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit">Sair</button></form>{% endif %}
         </div>
     </aside>
@@ -88,14 +69,17 @@
     <div class="conteudo-dashboard">
         <header class="topo-dashboard">
             <div>
-                <p class="sobretitulo-dashboard">PAINEL DE CONTROLE</p>
-                <h1>Seu espaço de estudos</h1>
-                <p>Organize seus conhecimentos. Evolua todos os dias.</p>
+                <p class="sobretitulo-dashboard">{% if pagina == 'painel' %}SEU ESPAÇO DE APRENDIZAGEM{% elif pagina == 'organizacao' %}PLANEJAMENTO E CONSTÂNCIA{% else %}SEU ACERVO PESSOAL{% endif %}</p>
+                <h1>{{ titulo_pagina }}</h1>
+                <p>{{ descricao_pagina }}</p>
             </div>
 
-            <a class="atalho-nova-anotacao" href="#nova-anotacao">
-                + Nova anotação
-            </a>
+            <div class="acoes-topo-dashboard">
+                {% if pagina != 'biblioteca' %}
+                <a class="atalho-materias" href="{{ url_for('listar_disciplinas') }}">Explorar matérias <span aria-hidden="true">→</span></a>
+                {% endif %}
+                {% if pagina == 'painel' %}<a class="atalho-nova-anotacao" href="{{ url_for('biblioteca') }}#nova-anotacao">＋ Anotação</a>{% endif %}
+            </div>
         </header>
 
         <main>
@@ -113,6 +97,7 @@
                 {% endif %}
             {% endwith %}
 
+            {% if pagina == 'painel' %}
             <!-- Atalho para retomar o curso em andamento -->
             <section class="retomar-estudos" aria-labelledby="titulo-retomar-estudos">
                 <div class="retomar-icone" aria-hidden="true">▶</div>
@@ -133,91 +118,50 @@
                         <p>Organize um curso com módulos e aulas para acompanhar sua evolução.</p>
                         <a class="botao-retomar" href="{{ url_for('listar_cursos') }}">Explorar cursos <span aria-hidden="true">→</span></a>
                     {% endif %}
+                    {% if total_revisoes_pendentes %}
+                        <a class="botao-retomar" href="{{ url_for('revisar_questoes') }}">Revisar {{ total_revisoes_pendentes }} atividade(s) pendente(s) <span aria-hidden="true">→</span></a>
+                    {% endif %}
                 </div>
             </section>
 
-            <!-- Estatísticas da biblioteca -->
+            <!-- Indicadores principais do estudo -->
             <section class="painel-estatisticas" id="painel">
 
-                <article class="cartao-estatistica">
-                    <span>Total de anotações</span>
-                    <strong>{{ total_anotacoes }}</strong>
+                <article class="cartao-estatistica estatistica-foco">
+                    <span><i aria-hidden="true">◷</i> Tempo estudado</span>
+                    <strong>{{ minutos_semana // 60 }}h {{ minutos_semana % 60 }}min</strong>
+                    <small>nos últimos 7 dias</small>
                 </article>
 
                 <article class="cartao-estatistica">
-                    <span>Matérias cadastradas</span>
-                    <strong>{{ total_materias }}</strong>
+                    <span><i aria-hidden="true">▦</i> Dias ativos</span>
+                    <strong>{{ dias_ativos_semana }} <small>/ 7 dias</small></strong>
+                    <small>constância nesta semana</small>
                 </article>
 
                 <article class="cartao-estatistica">
-                    <span>Anotações favoritas</span>
-                    <strong>{{ total_favoritas }}</strong>
+                    <span><i aria-hidden="true">✓</i> Revisões pendentes</span>
+                    <strong>{{ total_revisoes_pendentes }}</strong>
+                    <small>{% if total_revisoes_pendentes %}Atividades prontas para revisar{% else %}Você está em dia{% endif %}</small>
                 </article>
 
                 <article class="cartao-estatistica">
-                    <span>Categorias utilizadas</span>
-                    <strong>{{ total_categorias }}</strong>
+                    <span><i aria-hidden="true">↗</i> Progresso das trilhas</span>
+                    <strong>{{ progresso_cursos }}%</strong>
+                    <small>{{ aulas_concluidas }} de {{ total_aulas }} aulas concluídas</small>
                 </article>
 
             </section>
 
-            <!-- Resumo da atividade nos últimos sete dias -->
-            <section class="resumo-semanal" aria-labelledby="titulo-resumo-semanal">
-                <div class="cabecalho-resumo-semanal">
-                    <div>
-                        <p class="sobretitulo-dashboard">CONSTÂNCIA</p>
-                        <h2 id="titulo-resumo-semanal">Sua semana de estudos</h2>
-                    </div>
-                    <a href="{{ url_for('historico') }}">Ver histórico <span aria-hidden="true">→</span></a>
-                </div>
-
-                <div class="metricas-semana">
-                    <div><strong>{{ minutos_semana // 60 }}h {{ minutos_semana % 60 }}min</strong><span>estudados nos últimos 7 dias</span></div>
-                    <div><strong>{{ dias_ativos_semana }} de 7</strong><span>dias com atividade</span></div>
-                </div>
-
-                <div class="grafico-semanal" role="img" aria-label="Minutos de estudo por dia nos últimos sete dias">
-                    {% for dia in estudo_semana %}
-                        <div class="coluna-dia-semana" aria-label="{{ dia['rotulo'] }}: {{ dia['minutos'] }} minutos">
-                            <span class="valor-dia-semana">{% if dia['minutos'] %}{{ dia['minutos'] }}{% else %}—{% endif %}</span>
-                            <div class="trilho-dia-semana"><span style="height: {{ dia['percentual'] }}%"></span></div>
-                            <span class="rotulo-dia-semana">{{ dia['rotulo'] }}</span>
-                        </div>
-                    {% endfor %}
-                </div>
-
-                <div class="tendencia-semanal">
-                    <article class="cartao-tendencia-semanal">
-                        <span class="rotulo-tendencia">Esta semana até hoje</span>
-                        <strong>{{ minutos_semana_atual // 60 }}h {{ minutos_semana_atual % 60 }}min</strong>
-                        <span class="comparacao-tendencia">Mesmo período na semana passada: {{ minutos_semana_anterior // 60 }}h {{ minutos_semana_anterior % 60 }}min</span>
-                        {% if minutos_semana_anterior > 0 %}
-                            <p class="variacao-semanal {% if diferenca_semanal > 0 %}variacao-alta{% elif diferenca_semanal < 0 %}variacao-queda{% else %}variacao-estavel{% endif %}">
-                                {% if diferenca_semanal > 0 %}↑{% elif diferenca_semanal < 0 %}↓{% else %}→{% endif %}
-                                {{ diferenca_semanal|abs }} min ({{ variacao_semanal|abs }}%)
-                                {% if diferenca_semanal > 0 %}a mais{% elif diferenca_semanal < 0 %}a menos{% else %}sem alteração{% endif %}
-                            </p>
-                        {% elif minutos_semana_atual > 0 %}
-                            <p class="variacao-semanal variacao-alta">Você já registrou {{ minutos_semana_atual }} min nesta semana.</p>
-                        {% else %}
-                            <p class="variacao-semanal variacao-estavel">Nenhuma sessão registrada neste período.</p>
-                        {% endif %}
-                    </article>
-
-                    <article class="cartao-tendencia-semanal materia-destaque">
-                        <span class="rotulo-tendencia">Matéria em destaque</span>
-                        {% if materia_destaque_semana %}
-                            <strong>{{ materia_destaque_semana['materia'] }}</strong>
-                            <span class="comparacao-tendencia">{{ materia_destaque_semana['minutos'] // 60 }}h {{ materia_destaque_semana['minutos'] % 60 }}min estudados nesta semana</span>
-                        {% else %}
-                            <strong>Sem dados ainda</strong>
-                            <span class="comparacao-tendencia">Registre uma sessão para ver sua matéria em destaque.</span>
-                        {% endif %}
-                    </article>
-                </div>
-            </section>
+            <a class="atalho-progresso" href="{{ url_for('progresso') }}">
+                <span class="atalho-progresso-icone" aria-hidden="true">↗</span>
+                <span><strong>Acompanhe sua constância</strong><small>Veja o gráfico semanal, a comparação com a semana anterior e seu ritmo por matéria.</small></span>
+                <span class="atalho-progresso-acao">Ver progresso →</span>
+            </a>
+            {% endif %}
 
             <!-- Metas semanais e progresso por matéria -->
+            {% if pagina == 'organizacao' %}
             <section class="metas-materias" id="metas-materias" aria-labelledby="titulo-metas-materias">
                 <div class="cabecalho-metas-materias">
                     <div>
@@ -267,8 +211,10 @@
                     <p class="estado-vazio-metas">Cadastre uma matéria para começar a definir metas semanais.</p>
                 {% endif %}
             </section>
+            {% endif %}
 
             <!-- Resumo dos cursos e progresso de aprendizagem -->
+            {% if pagina == 'painel' %}
             <section class="secao-cursos-painel" id="progresso-cursos">
                 <div class="cabecalho-secao-cursos">
                     <div>
@@ -321,91 +267,10 @@
                     </div>
                 {% endif %}
             </section>
-
-            <!-- Cronômetro Pomodoro -->
-            <section class="pomodoro" id="pomodoro">
-
-                <h2>🍅 Foco Pomodoro</h2>
-
-                <p>Escolha uma matéria e concentre-se nos estudos.</p>
-
-                <form
-                    id="form-pomodoro"
-                    action="{{ url_for('registrar_estudo') }}"
-                    method="POST"
-                >
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-                    <input
-                        type="hidden"
-                        name="identificador"
-                        id="identificador-sessao"
-                    >
-
-                    <label for="materia-pomodoro">Matéria de estudo</label>
-
-                    <select id="materia-pomodoro" name="materia" required>
-                        {% for materia in materias_cadastradas %}
-                            <option value="{{ materia }}">{{ materia }}</option>
-                        {% endfor %}
-                    </select>
-
-                    <input
-                        type="hidden"
-                        name="duracao_minutos"
-                        value="25"
-                    >
-
-                    <div
-                        id="visor-pomodoro"
-                        class="visor-pomodoro"
-                        role="timer"
-                        aria-live="off"
-                    >
-                        25:00
-                    </div>
-
-                    <div class="botoes-pomodoro">
-
-                        <button
-                            type="button"
-                            id="botao-iniciar-pomodoro"
-                            onclick="iniciarPomodoro()"
-                        >
-                            Iniciar
-                        </button>
-
-                        <button
-                            type="button"
-                            id="botao-pausar-pomodoro"
-                            onclick="pausarPomodoro()"
-                        >
-                            Pausar
-                        </button>
-
-                        <button
-                            type="button"
-                            id="botao-reiniciar-pomodoro"
-                            onclick="reiniciarPomodoro()"
-                        >
-                            Reiniciar
-                        </button>
-
-                    </div>
-
-                </form>
-
-                <p
-                    id="status-pomodoro"
-                    class="dica-pomodoro"
-                    aria-live="polite"
-                >
-                    Pronto para começar?
-                </p>
-
-            </section>
+            {% endif %}
 
             <!-- Meta diária e registro manual -->
+            {% if pagina == 'organizacao' %}
             <section class="secao-meta" id="meta">
 
                 <h2>Minha meta diária</h2>
@@ -490,6 +355,7 @@
                     onsubmit="return prepararRegistroManual(this);"
                 >
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="retorno" value="organizacao">
 
                     <h3>Registrar sessão de estudo</h3>
 
@@ -524,8 +390,10 @@
                 </form>
 
             </section>
+            {% endif %}
 
             <!-- Cadastro de anotações -->
+            {% if pagina == 'biblioteca' %}
             <section id="nova-anotacao">
 
                 <h2>Nova anotação</h2>
@@ -603,8 +471,10 @@
                 </form>
 
             </section>
+            {% endif %}
 
             <!-- Biblioteca de anotações -->
+            {% if pagina == 'biblioteca' %}
             <section id="biblioteca">
 
                 <h2>Minha biblioteca</h2>
@@ -622,7 +492,7 @@
 
                 <!-- Pesquisa e filtros: GET não precisa de token CSRF -->
                 <form
-                    action="{{ url_for('inicio') }}"
+                    action="{{ url_for('biblioteca') }}"
                     method="GET"
                     class="form-pesquisa"
                 >
@@ -719,7 +589,7 @@
 
                         <button type="submit">Pesquisar</button>
 
-                        <a href="{{ url_for('inicio') }}">
+                        <a href="{{ url_for('biblioteca') }}">
                             Limpar filtros
                         </a>
 
@@ -833,7 +703,7 @@
                                 mais importantes.
                             </p>
 
-                            <a href="{{ url_for('inicio') }}">
+                            <a href="{{ url_for('biblioteca') }}">
                                 Ver todas as anotações
                             </a>
 
@@ -845,7 +715,7 @@
                                 Não encontramos anotações com os filtros selecionados.
                             </p>
 
-                            <a href="{{ url_for('inicio') }}">
+                            <a href="{{ url_for('biblioteca') }}">
                                 Limpar pesquisa e filtros
                             </a>
 
@@ -864,6 +734,7 @@
                 {% endif %}
 
             </section>
+            {% endif %}
 
         </main>
 
@@ -876,6 +747,7 @@
 </div>
 
 <!-- JavaScript do Pomodoro -->
+{% include "_pomodoro_widget.html" %}
 <script src="{{ url_for('static', filename='pomodoro.js') }}" defer></script>
 
 <!-- JavaScript do registro manual -->
