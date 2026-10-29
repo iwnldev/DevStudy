@@ -78,6 +78,27 @@ def inicializar_contas():
             CREATE INDEX IF NOT EXISTS idx_uso_ia_usuario_data
             ON uso_tutor_ia (usuario_id, usado_em)
         """)
+        conexao.execute("""
+            CREATE TABLE IF NOT EXISTS sugestoes_videoaulas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                usuario_id INTEGER NOT NULL,
+                disciplina TEXT NOT NULL,
+                modulo TEXT NOT NULL,
+                titulo TEXT NOT NULL,
+                url TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pendente'
+                    CHECK (status IN ('pendente', 'aprovada', 'rejeitada')),
+                criada_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                revisada_em TIMESTAMP,
+                revisada_por INTEGER,
+                FOREIGN KEY (usuario_id) REFERENCES usuarios (id) ON DELETE CASCADE,
+                FOREIGN KEY (revisada_por) REFERENCES usuarios (id) ON DELETE SET NULL
+            )
+        """)
+        conexao.execute("""
+            CREATE INDEX IF NOT EXISTS idx_sugestoes_videoaulas_estado
+            ON sugestoes_videoaulas (status, criada_em)
+        """)
         conexao.commit()
     finally:
         conexao.close()
@@ -137,6 +158,44 @@ def popular_conteudo_inicial():
                     conexao.execute("INSERT INTO flashcards (materia_id, frente, verso) VALUES (?, ?, ?)",
                                     (materia_id, frente, verso))
             conexao.execute("INSERT INTO migracoes_aplicadas (versao) VALUES (?)", (versao,))
+
+
+def popular_questoes_por_modulo():
+    """Adiciona uma questão autoral específica por módulo, sem duplicar dados."""
+    from questoes_ads import QUESTOES_ADS
+
+    versao = "questoes_por_modulo_ads_v1"
+    with conexao_aberta() as conexao:
+        conexao.execute("""CREATE TABLE IF NOT EXISTS migracoes_aplicadas (
+            versao TEXT PRIMARY KEY, aplicado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""")
+        if conexao.execute("SELECT 1 FROM migracoes_aplicadas WHERE versao = ?", (versao,)).fetchone():
+            return 0
+        inseridas = 0
+        for item in QUESTOES_ADS:
+            modulo = conexao.execute("""
+                SELECT m.id AS materia_id, md.id AS modulo_id
+                FROM materias m
+                JOIN cursos c ON c.materia_id = m.id
+                JOIN modulos md ON md.curso_id = c.id
+                WHERE m.nome = ? COLLATE NOCASE AND md.titulo = ? COLLATE NOCASE
+                ORDER BY c.id, md.ordem LIMIT 1
+            """, (item["materia"], item["modulo"])).fetchone()
+            if modulo is None:
+                continue
+            conexao.execute("""
+                INSERT INTO questoes
+                    (materia_id, modulo_id, enunciado, tipo, alternativas,
+                     resposta_correta, explicacao, dificuldade, dica)
+                VALUES (?, ?, ?, 'multipla_escolha', ?, ?, ?, ?, ?)
+            """, (
+                modulo["materia_id"], modulo["modulo_id"], item["enunciado"],
+                json.dumps(item["alternativas"], ensure_ascii=False), item["correta"],
+                item["explicacao"], item["dificuldade"], item["dica"]
+            ))
+            inseridas += 1
+        conexao.execute("INSERT INTO migracoes_aplicadas (versao) VALUES (?)", (versao,))
+        return inseridas
 
 
 def popular_aulas_praticas():
@@ -757,6 +816,7 @@ def criar_tabelas():
                 alternativas TEXT NOT NULL DEFAULT '[]',
                 resposta_correta TEXT NOT NULL,
                 explicacao TEXT NOT NULL DEFAULT '',
+                dica TEXT NOT NULL DEFAULT '',
                 dificuldade TEXT NOT NULL DEFAULT 'media'
                     CHECK (dificuldade IN ('facil', 'media', 'dificil')),
                 criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -785,6 +845,26 @@ def criar_tabelas():
             CREATE INDEX IF NOT EXISTS idx_tentativas_questao
             ON tentativas_questoes (questao_id, respondida_em DESC)
         """)
+        colunas_questoes = {coluna["name"] for coluna in conexao.execute("PRAGMA table_info(questoes)")}
+        if "dica" not in colunas_questoes:
+            conexao.execute("ALTER TABLE questoes ADD COLUMN dica TEXT NOT NULL DEFAULT ''")
+        if "proxima_revisao" not in colunas_questoes:
+            conexao.execute("ALTER TABLE questoes ADD COLUMN proxima_revisao TEXT NOT NULL DEFAULT '2000-01-01'")
+        if "intervalo_dias" not in colunas_questoes:
+            conexao.execute("ALTER TABLE questoes ADD COLUMN intervalo_dias INTEGER NOT NULL DEFAULT 0")
+        conexao.execute("""
+            CREATE TABLE IF NOT EXISTS tentativas_aulas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                aula_id INTEGER NOT NULL,
+                resposta TEXT NOT NULL,
+                acertou INTEGER CHECK (acertou IN (0, 1)),
+                intervalo_dias INTEGER NOT NULL DEFAULT 0,
+                proxima_revisao TEXT,
+                respondida_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (aula_id) REFERENCES aulas (id) ON DELETE CASCADE
+            )
+        """)
+        conexao.execute("CREATE INDEX IF NOT EXISTS idx_tentativas_aula_revisao ON tentativas_aulas (proxima_revisao, aula_id)")
 
         # --------------------------------------
         # FLASHCARDS E REVISÕES
