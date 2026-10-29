@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ disciplina['nome'] }} | DevStudy</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='pomodoro.css') }}">
+    <style>
+        .grade-desempenho-modulos{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:18px 0}
+        .desempenho-modulo{padding:16px;border:1px solid #dfe6ef;border-radius:12px;background:#fff}
+        .desempenho-modulo h3{font-size:1rem;margin:0 0 8px}.desempenho-modulo p{margin:5px 0;color:#5b6473}
+        .dica-questao{margin:12px 0;padding:12px;border-radius:9px;background:#f2f7ff}
+        .dica-questao summary{cursor:pointer;font-weight:700;color:#2857a4}
+    </style>
 </head>
 <body class="pagina-disciplina">
     <main class="container">
@@ -33,6 +41,8 @@
                 <span class="selo-estudo">DEVSTUDY INTELLIGENCE</span>
                 <h2>Próximo passo</h2>
                 <p>{{ recomendacao }}</p>
+                <a class="botao botao-primario" href="{{ url_for('revisar_questoes', materia_id=disciplina['id']) }}">Praticar e revisar exercícios</a>
+                {% if questoes_pendentes or aulas_pendentes or total_cards_pendentes %}<span class="contador-recurso">{{ questoes_pendentes + aulas_pendentes + total_cards_pendentes }} revisão(ões) pendente(s)</span>{% endif %}
             </div>
             <div class="metricas-estudo-disciplina">
                 <div><span>Questões respondidas</span><strong>{{ total_tentativas }}</strong></div>
@@ -73,7 +83,7 @@
                 {% else %}
                     <div class="estado-vazio-disciplina">
                         <span aria-hidden="true">▤</span>
-                        <h3>Esta disciplina ainda não tem trilha</h3>
+                        <h3>Esta disciplina ainda não tem conteúdo</h3>
                         <p>Crie uma trilha de aprendizagem e organize módulos e aulas para acompanhar seu progresso.</p>
                     </div>
                 {% endif %}
@@ -183,12 +193,26 @@
                 <div><p class="sobretitulo-materias">PRÁTICA E FEEDBACK</p><h2>Exercícios e gabarito</h2><p>O servidor confere a resposta, registra cada tentativa e calcula seu desempenho nesta disciplina.</p></div>
                 <span class="contador-recurso">{{ questoes|length }} questão(ões) · {{ total_acertos }} acerto(s)</span>
             </div>
+            <h3>Desempenho por módulo</h3>
+            <div class="grade-desempenho-modulos">
+                {% for desempenho in desempenho_modulos %}
+                    <article class="desempenho-modulo">
+                        <h3>{{ desempenho['titulo'] }}</h3>
+                        <p>{{ desempenho['total_questoes'] }} questão(ões) · {{ desempenho['total_tentativas'] }} tentativa(s)</p>
+                        {% if desempenho['percentual_acerto'] is not none %}
+                            <strong>{{ desempenho['percentual_acerto'] }}% de acerto</strong>
+                            <p>{{ desempenho['total_acertos'] }} resposta(s) correta(s)</p>
+                        {% else %}<p>Ainda sem tentativas. Responda ao exercício para iniciar seu acompanhamento.</p>{% endif %}
+                    </article>
+                {% endfor %}
+            </div>
             {% if questoes %}
                 <div class="lista-questoes-estudo">
                     {% for questao in questoes %}
                         <article class="cartao-questao-estudo" id="questao-{{ questao['id'] }}">
                             <div class="topo-recurso-estudo"><span class="etiqueta-recurso">{% if questao['tipo'] == 'vf' %}Verdadeiro ou falso{% elif questao['tipo'] == 'numerica' %}Resposta numérica{% else %}Múltipla escolha{% endif %} · {{ questao['dificuldade']|title }}</span>{% if questao['modulo_titulo'] %}<small>{{ questao['modulo_titulo'] }}</small>{% endif %}</div>
                             <h3>{{ loop.index }}. {{ questao['enunciado'] }}</h3>
+                            {% if questao['dica'] %}<details class="dica-questao"><summary>Precisa de uma dica?</summary><p>{{ questao['dica'] }}</p></details>{% endif %}
                             <form method="POST" action="{{ url_for('responder_questao', materia_id=disciplina['id'], questao_id=questao['id']) }}" class="form-responder-questao">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 {% if questao['tipo'] == 'numerica' %}
@@ -225,6 +249,7 @@
                     <fieldset id="alternativas-vf" class="campo-alternativas-questao" hidden><legend>Gabarito</legend><label class="opcao-questao"><input type="radio" name="resposta_correta" value="1"><span>Verdadeiro</span></label><label class="opcao-questao"><input type="radio" name="resposta_correta" value="2"><span>Falso</span></label></fieldset>
                     <div id="gabarito-numerico" hidden><label for="resposta-numerica">Resposta numérica correta</label><input id="resposta-numerica" name="resposta_correta" inputmode="decimal" maxlength="50" placeholder="Ex.: 42"></div>
                     <label for="questao-explicacao">Explicação do gabarito</label><textarea id="questao-explicacao" name="explicacao" rows="3" maxlength="3000" placeholder="Explique por que essa é a resposta correta"></textarea>
+                    <label for="questao-dica">Dica <span>(opcional)</span></label><textarea id="questao-dica" name="dica" rows="2" maxlength="1000" placeholder="Dê uma pista sem revelar a resposta"></textarea>
                     <button type="submit">Salvar exercício</button>
                 </form>
             </details>
@@ -276,5 +301,7 @@
             atualizar();
         })();
     </script>
+{% include "_pomodoro_widget.html" %}
+<script src="{{ url_for('static', filename='pomodoro.js') }}" defer></script>
 </body>
 </html>
