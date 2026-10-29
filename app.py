@@ -14,6 +14,7 @@ from urllib.request import Request, urlopen
 import unicodedata
 import re
 import secrets
+import ipaddress
 import threading
 import sqlite3
 import smtplib
@@ -21,6 +22,7 @@ import ssl
 from email.message import EmailMessage
 from pathlib import Path
 from urllib.parse import urlsplit
+from videoaulas import videoaulas_para_modulo
 from werkzeug.security import generate_password_hash, check_password_hash
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
@@ -28,7 +30,7 @@ from database import (conexao_aberta, criar_tabelas, inicializar_contas,
                       conectar_contas, criar_banco_usuario, definir_usuario_banco,
                       restaurar_usuario_banco, popular_conteudo_inicial,
                       popular_aulas_praticas, popular_aulas_didaticas,
-                      popular_aulas_aprofundamento)
+                      popular_aulas_aprofundamento, popular_questoes_por_modulo)
 
 app = Flask(__name__)
 _chave_configurada = os.environ.get("DEVSTUDY_SECRET_KEY")
@@ -66,6 +68,7 @@ def _garantir_base_inicial():
             popular_aulas_praticas()
             popular_aulas_didaticas()
             popular_aulas_aprofundamento()
+            popular_questoes_por_modulo()
             inicializar_contas()
             _bootstrap_pronto = True
 
@@ -90,6 +93,7 @@ def exigir_conta_e_selecionar_banco():
                 popular_aulas_praticas()
                 popular_aulas_didaticas()
                 popular_aulas_aprofundamento()
+                popular_questoes_por_modulo()
                 _usuarios_bancos_prontos.add(usuario_id)
 
 
@@ -98,6 +102,45 @@ def restaurar_contexto_banco(_erro=None):
     token = getattr(g, "db_context_token", None)
     if token is not None:
         restaurar_usuario_banco(token)
+
+
+def moderador_videoaulas_atual():
+    """Moderadores são explicitamente configurados por e-mail no ambiente."""
+    moderadores = {
+        email.strip().casefold()
+        for email in os.environ.get("DEVSTUDY_MODERADORES", "").split(",")
+        if email.strip()
+    }
+    usuario_id = session.get("usuario_id")
+    if not usuario_id or not moderadores:
+        return False
+    contas = conectar_contas()
+    try:
+        usuario = contas.execute("SELECT email FROM usuarios WHERE id = ?", (usuario_id,)).fetchone()
+        return bool(usuario and usuario["email"].casefold() in moderadores)
+    finally:
+        contas.close()
+
+
+def url_video_publica_valida(valor):
+    """Aceita links HTTPS públicos sem credenciais nem destinos locais."""
+    try:
+        partes = urlsplit(valor)
+        host = partes.hostname
+        if partes.scheme != "https" or not host or partes.username or partes.password:
+            return False
+        host = host.casefold().rstrip(".")
+        if host in {"localhost", "localhost.localdomain"} or host.endswith((".local", ".internal")):
+            return False
+        try:
+            endereco = ipaddress.ip_address(host)
+            if not endereco.is_global:
+                return False
+        except ValueError:
+            pass
+        return True
+    except ValueError:
+        return False
 
 
 def _enviar_email(destinatario, assunto, corpo):
@@ -149,6 +192,86 @@ def _url_email(endpoint, token):
 
 def _token_conta(dados, finalidade):
     return URLSafeTimedSerializer(app.config["SECRET_KEY"]).dumps(dados, salt=f"devstudy-{finalidade}")
+
+
+@app.route("/modulo/<int:modulo_id>/videoaulas/sugerir", methods=["POST"])
+def sugerir_videoaula(modulo_id):
+    titulo = validar_texto(request.form.get("titulo", ""), 160)
+    url = (request.form.get("url") or "").strip()
+    if titulo is None or len(titulo) < 4 or len(url) > 1000 or not url_video_publica_valida(url):
+        flash("Informe um título e um link HTTPS público válido.", "erro")
+        return redirect(url_for("visualizar_modulo", modulo_id=modulo_id))
+
+    with conexao_aberta() as conexao:
+        modulo = conexao.execute("""
+            SELECT materias.nome AS disciplina, modulos.titulo AS modulo
+            FROM modulos
+            JOIN cursos ON cursos.id = modulos.curso_id
+            JOIN materias ON materias.id = cursos.materia_id
+            WHERE modulos.id = ?
+        """, (modulo_id,)).fetchone()
+    if modulo is None:
+        abort(404)
+
+    contas = conectar_contas()
+    try:
+        quantidade = contas.execute("""
+            SELECT COUNT(*) FROM sugestoes_videoaulas
+            WHERE usuario_id = ? AND date(criada_em) = date('now')
+        """, (session["usuario_id"],)).fetchone()[0]
+        if quantidade >= 5:
+            flash("Você já enviou o limite diário de cinco sugestões.", "erro")
+            return redirect(url_for("visualizar_modulo", modulo_id=modulo_id))
+        repetida = contas.execute("""
+            SELECT 1 FROM sugestoes_videoaulas
+            WHERE disciplina = ? AND modulo = ? AND url = ?
+              AND status IN ('pendente', 'aprovada')
+        """, (modulo["disciplina"], modulo["modulo"], url)).fetchone()
+        if repetida:
+            flash("Este link já foi sugerido ou está publicado para o módulo.", "erro")
+            return redirect(url_for("visualizar_modulo", modulo_id=modulo_id))
+        contas.execute("""
+            INSERT INTO sugestoes_videoaulas (usuario_id, disciplina, modulo, titulo, url)
+            VALUES (?, ?, ?, ?, ?)
+        """, (session["usuario_id"], modulo["disciplina"], modulo["modulo"], titulo, url))
+        contas.commit()
+    finally:
+        contas.close()
+    flash("Sugestão enviada para revisão. Ela só aparecerá para todos depois de aprovada.", "sucesso")
+    return redirect(url_for("visualizar_modulo", modulo_id=modulo_id))
+
+
+@app.route("/curadoria/videoaulas", methods=["GET", "POST"])
+def curadoria_videoaulas():
+    if not moderador_videoaulas_atual():
+        abort(403)
+    contas = conectar_contas()
+    try:
+        if request.method == "POST":
+            sugestao_id = validar_inteiro(request.form.get("sugestao_id", ""), 1, 2147483647)
+            acao = request.form.get("acao")
+            if sugestao_id is None or acao not in {"aprovar", "rejeitar"}:
+                abort(400)
+            status = "aprovada" if acao == "aprovar" else "rejeitada"
+            cursor = contas.execute("""
+                UPDATE sugestoes_videoaulas
+                SET status = ?, revisada_em = CURRENT_TIMESTAMP, revisada_por = ?
+                WHERE id = ? AND status = 'pendente'
+            """, (status, session["usuario_id"], sugestao_id))
+            contas.commit()
+            flash("Sugestão aprovada e publicada." if status == "aprovada" else "Sugestão rejeitada.",
+                  "sucesso" if cursor.rowcount else "erro")
+            return redirect(url_for("curadoria_videoaulas"))
+        pendentes = contas.execute("""
+            SELECT s.*, u.nome AS autor
+            FROM sugestoes_videoaulas s
+            JOIN usuarios u ON u.id = s.usuario_id
+            WHERE s.status = 'pendente'
+            ORDER BY s.criada_em, s.id
+        """).fetchall()
+        return render_template("curadoria_videoaulas.html", sugestoes=pendentes)
+    finally:
+        contas.close()
 
 
 @app.route("/registrar", methods=["GET", "POST"])
@@ -585,6 +708,11 @@ def listar_disciplinas():
                 COALESCE(progresso.aulas_concluidas, 0) AS aulas_concluidas,
                 (SELECT COUNT(*) FROM questoes
                  WHERE questoes.materia_id = materias.id) AS total_questoes,
+                (SELECT COUNT(*) FROM questoes q
+                 WHERE q.materia_id = materias.id AND (
+                    q.proxima_revisao <= date('now','localtime') OR NOT EXISTS
+                    (SELECT 1 FROM tentativas_questoes t WHERE t.questao_id = q.id)
+                 )) AS questoes_pendentes,
                 (SELECT COUNT(*) FROM tentativas_questoes
                  JOIN questoes ON questoes.id = tentativas_questoes.questao_id
                  WHERE questoes.materia_id = materias.id) AS total_tentativas,
@@ -766,7 +894,12 @@ def definir_semestre_disciplina(materia_id):
 def visualizar_disciplina(materia_id):
     with conexao_aberta() as conexao:
         disciplina = conexao.execute("""
-            SELECT id, nome, descricao, semestre
+            SELECT id, nome, descricao, semestre,
+                (SELECT COUNT(*) FROM questoes q
+                 WHERE q.materia_id = materias.id AND (
+                    q.proxima_revisao <= date('now','localtime') OR NOT EXISTS
+                    (SELECT 1 FROM tentativas_questoes t WHERE t.questao_id = q.id)
+                 )) AS questoes_pendentes
             FROM materias
             WHERE id = ?
         """, (materia_id,)).fetchone()
@@ -833,6 +966,19 @@ def visualizar_disciplina(materia_id):
             WHERE cursos.materia_id = ?
             ORDER BY modulos.ordem, modulos.titulo COLLATE NOCASE
         """, (materia_id,)).fetchall()
+        desempenho_modulos = conexao.execute("""
+            SELECT md.id, md.titulo,
+                   COUNT(DISTINCT q.id) AS total_questoes,
+                   COUNT(t.id) AS total_tentativas,
+                   COALESCE(SUM(t.acertou), 0) AS total_acertos
+            FROM modulos md
+            JOIN cursos c ON c.id = md.curso_id
+            LEFT JOIN questoes q ON q.modulo_id = md.id
+            LEFT JOIN tentativas_questoes t ON t.questao_id = q.id
+            WHERE c.materia_id = ?
+            GROUP BY md.id, md.titulo, md.ordem
+            ORDER BY md.ordem, md.id
+        """, (materia_id,)).fetchall()
         questoes = conexao.execute("""
             SELECT
                 questoes.*,
@@ -854,6 +1000,16 @@ def visualizar_disciplina(materia_id):
             WHERE flashcards.materia_id = ?
             ORDER BY flashcards.proxima_revisao, flashcards.id
         """, (materia_id,)).fetchall()
+        aulas_pendentes = conexao.execute("""
+            SELECT COUNT(*) FROM aulas a
+            JOIN modulos md ON md.id = a.modulo_id
+            JOIN cursos cu ON cu.id = md.curso_id
+            WHERE cu.materia_id = ? AND EXISTS (
+                SELECT 1 FROM tentativas_aulas ta
+                WHERE ta.id = (SELECT MAX(ultima.id) FROM tentativas_aulas ultima WHERE ultima.aula_id = a.id)
+                  AND ta.proxima_revisao <= date('now','localtime')
+            )
+        """, (materia_id,)).fetchone()[0]
 
     questoes_exibicao = []
     total_tentativas = 0
@@ -872,6 +1028,15 @@ def visualizar_disciplina(materia_id):
         total_tentativas += item["total_tentativas"]
         total_acertos += item["total_acertos"]
 
+    desempenho_modulos_exibicao = []
+    for modulo in desempenho_modulos:
+        item = dict(modulo)
+        item["percentual_acerto"] = (
+            round(item["total_acertos"] / item["total_tentativas"] * 100)
+            if item["total_tentativas"] else None
+        )
+        desempenho_modulos_exibicao.append(item)
+
     total_cards_pendentes = sum(
         1 for card in flashcards
         if card["proxima_revisao"] <= date.today().isoformat()
@@ -885,6 +1050,10 @@ def visualizar_disciplina(materia_id):
             f"Você tem {total_cards_pendentes} flashcard(s) aguardando revisão. "
             "Revise-os para reforçar a memória."
         )
+    elif aulas_pendentes:
+        recomendacao = f"Há {aulas_pendentes} exercício(s) de aula para revisar. Refaça a tentativa antes de consultar a resolução."
+    elif disciplina["questoes_pendentes"]:
+        recomendacao = f"Há {disciplina['questoes_pendentes']} exercício(s) novo(s) ou vencido(s). Faça uma rodada curta de prática."
     elif percentual_acerto is not None and percentual_acerto < 70:
         recomendacao = (
             "Sua taxa de acerto está abaixo de 70%. Releia as explicações "
@@ -906,12 +1075,15 @@ def visualizar_disciplina(materia_id):
         materiais=materiais,
         modulos=modulos,
         questoes=questoes_exibicao,
+        desempenho_modulos=desempenho_modulos_exibicao,
         flashcards=flashcards,
         today=date.today().isoformat(),
         total_tentativas=total_tentativas,
         total_acertos=total_acertos,
         percentual_acerto=percentual_acerto,
         total_cards_pendentes=total_cards_pendentes,
+        questoes_pendentes=disciplina["questoes_pendentes"],
+        aulas_pendentes=aulas_pendentes,
         recomendacao=recomendacao,
         ai_configurada=bool(os.environ.get("OPENAI_API_KEY"))
     )
@@ -1022,11 +1194,12 @@ def excluir_material_estudo(materia_id, material_id):
 def nova_questao(materia_id):
     enunciado = validar_texto(request.form.get("enunciado", ""), 3000)
     explicacao = request.form.get("explicacao", "").strip()
+    dica = request.form.get("dica", "").strip()
     tipo = request.form.get("tipo", "multipla_escolha")
     dificuldade = request.form.get("dificuldade", "media")
     modulo_texto = request.form.get("modulo_id", "").strip()
     dificuldade_validas = {"facil", "media", "dificil"}
-    if enunciado is None or len(explicacao) > 3000 or dificuldade not in dificuldade_validas:
+    if enunciado is None or len(explicacao) > 3000 or len(dica) > 1000 or dificuldade not in dificuldade_validas:
         flash("Confira o enunciado, a explicação e a dificuldade.", "erro")
         return redirect(url_for("visualizar_disciplina", materia_id=materia_id) + "#exercicios")
 
@@ -1076,12 +1249,12 @@ def nova_questao(materia_id):
         conexao.execute("""
             INSERT INTO questoes
                 (materia_id, modulo_id, enunciado, tipo, alternativas,
-                 resposta_correta, explicacao, dificuldade)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 resposta_correta, explicacao, dificuldade, dica)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             materia_id, modulo_id, enunciado, tipo,
             json.dumps(alternativas, ensure_ascii=False), correta,
-            explicacao, dificuldade
+            explicacao, dificuldade, dica
         ))
     flash("Questão adicionada. O gabarito será conferido no servidor.", "sucesso")
     return redirect(url_for("visualizar_disciplina", materia_id=materia_id) + "#exercicios")
@@ -1100,7 +1273,7 @@ def responder_questao(materia_id, questao_id):
     resposta = request.form.get("resposta", "").strip()
     with conexao_aberta() as conexao:
         questao = conexao.execute("""
-            SELECT id, tipo, alternativas, resposta_correta
+            SELECT id, tipo, alternativas, resposta_correta, intervalo_dias
             FROM questoes WHERE id = ? AND materia_id = ?
         """, (questao_id, materia_id)).fetchone()
         if questao is None:
@@ -1125,15 +1298,73 @@ def responder_questao(materia_id, questao_id):
             INSERT INTO tentativas_questoes (questao_id, resposta, acertou)
             VALUES (?, ?, ?)
         """, (questao_id, resposta, int(acertou)))
+        intervalo = min(max(questao["intervalo_dias"] * 2, 1), 30) if acertou else 1
+        proxima_revisao = (date.today() + timedelta(days=intervalo)).isoformat()
+        conexao.execute("""
+            UPDATE questoes SET intervalo_dias = ?, proxima_revisao = ? WHERE id = ?
+        """, (intervalo, proxima_revisao, questao_id))
 
     flash(
         "Resposta correta!" if acertou else "Ainda não. Confira o gabarito e a explicação.",
         "sucesso" if acertou else "erro"
     )
-    return redirect(
-        url_for("visualizar_disciplina", materia_id=materia_id,
-                gabarito=questao_id) + f"#questao-{questao_id}"
-    )
+    if request.form.get("origem") == "revisoes":
+        filtro_materia = validar_inteiro(request.form.get("materia_filtro", ""), 1, 2147483647)
+        return redirect(url_for("revisar_questoes", gabarito=questao_id, materia_id=filtro_materia) + f"#questao-{questao_id}")
+    return redirect(url_for("visualizar_disciplina", materia_id=materia_id,
+                            gabarito=questao_id) + f"#questao-{questao_id}")
+
+
+@app.route("/revisoes")
+def revisar_questoes():
+    """Centraliza questões ainda não praticadas e revisões que venceram."""
+    hoje = date.today().isoformat()
+    gabarito_id = validar_inteiro(request.args.get("gabarito", ""), 1, 2147483647)
+    materia_id = validar_inteiro(request.args.get("materia_id", ""), 1, 2147483647)
+    with conexao_aberta() as conexao:
+        questoes = conexao.execute("""
+            SELECT q.*, m.nome AS materia_nome, md.titulo AS modulo_titulo,
+                   (SELECT COUNT(*) FROM tentativas_questoes t WHERE t.questao_id = q.id) AS total_tentativas,
+                   (SELECT COALESCE(SUM(t.acertou), 0) FROM tentativas_questoes t WHERE t.questao_id = q.id) AS total_acertos
+            FROM questoes q
+            JOIN materias m ON m.id = q.materia_id
+            LEFT JOIN modulos md ON md.id = q.modulo_id
+            WHERE (q.proxima_revisao <= ? OR NOT EXISTS (
+                SELECT 1 FROM tentativas_questoes t WHERE t.questao_id = q.id
+            ) OR q.id = ?) AND (? IS NULL OR q.materia_id = ?)
+            ORDER BY CASE WHEN q.id = ? THEN 0 ELSE 1 END, q.proxima_revisao, m.nome COLLATE NOCASE, q.id
+            LIMIT 12
+        """, (hoje, gabarito_id or -1, materia_id, materia_id, gabarito_id or -1)).fetchall()
+        aulas_pendentes = conexao.execute("""
+            SELECT a.id AS aula_id, a.titulo AS aula_titulo, md.id AS modulo_id,
+                   md.titulo AS modulo_titulo, m.id AS materia_id, m.nome AS materia_nome,
+                   ta.proxima_revisao, ta.acertou
+            FROM tentativas_aulas ta
+            JOIN aulas a ON a.id = ta.aula_id
+            JOIN modulos md ON md.id = a.modulo_id
+            JOIN cursos cu ON cu.id = md.curso_id
+            JOIN materias m ON m.id = cu.materia_id
+            WHERE ta.id = (SELECT MAX(ultima.id) FROM tentativas_aulas ultima WHERE ultima.aula_id = a.id)
+              AND ta.proxima_revisao <= ? AND (? IS NULL OR m.id = ?)
+            ORDER BY ta.proxima_revisao, m.nome COLLATE NOCASE, md.ordem, a.ordem
+        """, (hoje, materia_id, materia_id)).fetchall()
+        flashcards_pendentes = conexao.execute("""
+            SELECT f.*, m.nome AS materia_nome, md.titulo AS modulo_titulo
+            FROM flashcards f JOIN materias m ON m.id = f.materia_id
+            LEFT JOIN modulos md ON md.id = f.modulo_id
+            WHERE f.proxima_revisao <= ? AND (? IS NULL OR f.materia_id = ?)
+            ORDER BY f.proxima_revisao, m.nome COLLATE NOCASE, f.id
+        """, (hoje, materia_id, materia_id)).fetchall()
+    itens = []
+    for questao in questoes:
+        item = dict(questao)
+        try:
+            item["alternativas_lista"] = json.loads(item["alternativas"])
+        except (TypeError, json.JSONDecodeError):
+            item["alternativas_lista"] = []
+        item["percentual_acerto"] = round(item["total_acertos"] / item["total_tentativas"] * 100) if item["total_tentativas"] else None
+        itens.append(item)
+    return render_template("revisoes.html", questoes=itens, aulas_pendentes=aulas_pendentes, flashcards=flashcards_pendentes, gabarito_id=gabarito_id, materia_id=materia_id, hoje=hoje)
 
 
 @app.route("/disciplina/<int:materia_id>/flashcards/novo", methods=["POST"])
@@ -1190,6 +1421,9 @@ def revisar_flashcard(materia_id, flashcard_id):
         f"Revisão registrada. Próxima revisão em {intervalo} dia(s).",
         "sucesso"
     )
+    if request.form.get("origem") == "revisoes":
+        filtro_materia = validar_inteiro(request.form.get("materia_filtro", ""), 1, 2147483647)
+        return redirect(url_for("revisar_questoes", materia_id=filtro_materia))
     return redirect(url_for("visualizar_disciplina", materia_id=materia_id) + "#revisoes")
 
 
@@ -1610,9 +1844,12 @@ def visualizar_modulo(modulo_id):
             SELECT
                 modulos.*,
                 cursos.titulo AS curso_titulo,
-                cursos.id AS curso_id
+                cursos.id AS curso_id,
+                cursos.materia_id AS materia_id,
+                materias.nome AS materia_nome
             FROM modulos
             JOIN cursos ON cursos.id = modulos.curso_id
+            LEFT JOIN materias ON materias.id = cursos.materia_id
             WHERE modulos.id = ?
         """, (modulo_id,)).fetchone()
 
@@ -1620,17 +1857,111 @@ def visualizar_modulo(modulo_id):
             abort(404)
 
         aulas = conexao.execute("""
-            SELECT *
-            FROM aulas
-            WHERE modulo_id = ?
-            ORDER BY ordem ASC, id ASC
+            SELECT aulas.*,
+                (SELECT id FROM tentativas_aulas ta WHERE ta.aula_id = aulas.id ORDER BY id DESC LIMIT 1) AS tentativa_id,
+                (SELECT resposta FROM tentativas_aulas ta WHERE ta.aula_id = aulas.id ORDER BY id DESC LIMIT 1) AS tentativa_resposta,
+                (SELECT acertou FROM tentativas_aulas ta WHERE ta.aula_id = aulas.id ORDER BY id DESC LIMIT 1) AS tentativa_acertou,
+                (SELECT proxima_revisao FROM tentativas_aulas ta WHERE ta.aula_id = aulas.id ORDER BY id DESC LIMIT 1) AS tentativa_proxima_revisao,
+                (SELECT respondida_em FROM tentativas_aulas ta WHERE ta.aula_id = aulas.id ORDER BY id DESC LIMIT 1) AS tentativa_data,
+                (SELECT COUNT(*) FROM tentativas_aulas ta WHERE ta.aula_id = aulas.id AND ta.acertou IS NOT NULL) AS tentativas_avaliadas,
+                (SELECT COALESCE(SUM(ta.acertou), 0) FROM tentativas_aulas ta WHERE ta.aula_id = aulas.id AND ta.acertou IS NOT NULL) AS tentativas_com_acerto
+            FROM aulas WHERE modulo_id = ? ORDER BY ordem ASC, id ASC
         """, (modulo_id,)).fetchall()
+
+    aulas_exibicao = []
+    for aula in aulas:
+        item = dict(aula)
+        aulas_exibicao.append(item)
+    videoaulas_modulo = videoaulas_para_modulo(
+        modulo["materia_nome"], modulo["titulo"]
+    )
+    contas = conectar_contas()
+    try:
+        sugestoes_publicadas = contas.execute("""
+            SELECT titulo, url FROM sugestoes_videoaulas
+            WHERE disciplina = ? AND modulo = ? AND status = 'aprovada'
+            ORDER BY revisada_em DESC, id DESC
+        """, (modulo["materia_nome"], modulo["titulo"])).fetchall()
+    finally:
+        contas.close()
+    videoaulas_modulo.extend({
+        "canal": "Comunidade DevStudy",
+        "topico": modulo["titulo"],
+        "titulo": sugestao["titulo"],
+        "url": sugestao["url"],
+        "curado": True,
+        "origem": "comunidade",
+    } for sugestao in sugestoes_publicadas)
+    with conexao_aberta() as conexao:
+        questao_modulo = conexao.execute(
+            "SELECT id FROM questoes WHERE modulo_id = ? ORDER BY id LIMIT 1",
+            (modulo_id,)
+        ).fetchone()
 
     return render_template(
         "modulo.html",
         modulo=modulo,
-        aulas=aulas
+        aulas=aulas_exibicao,
+        videoaulas=videoaulas_modulo,
+        moderador_videoaulas=moderador_videoaulas_atual(),
+        questao_modulo_id=questao_modulo["id"] if questao_modulo else None,
+        tentativa_param=validar_inteiro(request.args.get("tentativa", ""), 1, 2147483647)
     )
+
+
+@app.route("/aula/<int:aula_id>/responder-exercicio", methods=["POST"])
+def responder_exercicio_aula(aula_id):
+    resposta = request.form.get("resposta", "").strip()
+    with conexao_aberta() as conexao:
+        aula = conexao.execute("SELECT id, modulo_id FROM aulas WHERE id = ?", (aula_id,)).fetchone()
+        if aula is None:
+            abort(404)
+        modulo_id = aula["modulo_id"]
+        if not resposta or len(resposta) > 5000:
+            flash("Escreva uma tentativa de até 5.000 caracteres antes de revelar a resolução.", "erro")
+            return redirect(url_for("visualizar_modulo", modulo_id=modulo_id) + f"#aula-{aula_id}")
+        ultima_tentativa = conexao.execute("""
+            SELECT intervalo_dias, proxima_revisao FROM tentativas_aulas
+            WHERE aula_id = ? ORDER BY id DESC LIMIT 1
+        """, (aula_id,)).fetchone()
+        intervalo_atual = ultima_tentativa["intervalo_dias"] if ultima_tentativa else 0
+        proxima_atual = ultima_tentativa["proxima_revisao"] if ultima_tentativa else None
+        cursor = conexao.execute("""
+            INSERT INTO tentativas_aulas (aula_id, resposta, intervalo_dias, proxima_revisao)
+            VALUES (?, ?, ?, ?)
+        """, (aula_id, resposta, intervalo_atual, proxima_atual))
+        tentativa_id = cursor.lastrowid
+    flash("Tentativa registrada. Compare seu raciocínio com a resolução e avalie como foi.", "sucesso")
+    return redirect(url_for("visualizar_modulo", modulo_id=modulo_id, tentativa=tentativa_id) + f"#aula-{aula_id}")
+
+
+@app.route("/aula/<int:aula_id>/avaliar-exercicio", methods=["POST"])
+def avaliar_exercicio_aula(aula_id):
+    resultado = request.form.get("resultado")
+    tentativa_id = validar_inteiro(request.form.get("tentativa_id", ""), 1, 2147483647)
+    if resultado not in {"0", "1"} or tentativa_id is None:
+        abort(400)
+    with conexao_aberta() as conexao:
+        tentativa = conexao.execute("""
+            SELECT ta.id, ta.intervalo_dias, ta.aula_id, a.modulo_id, ta.acertou
+            FROM tentativas_aulas ta JOIN aulas a ON a.id = ta.aula_id
+            WHERE ta.id = ? AND ta.aula_id = ?
+        """, (tentativa_id, aula_id)).fetchone()
+        if tentativa is None:
+            abort(404)
+        if tentativa["acertou"] is not None:
+            flash("Esta tentativa já foi avaliada. Envie uma nova resposta para reavaliar.", "erro")
+            return redirect(url_for("visualizar_modulo", modulo_id=tentativa["modulo_id"]) + f"#aula-{aula_id}")
+        acertou = resultado == "1"
+        intervalo = min(max(tentativa["intervalo_dias"] * 2, 1), 30) if acertou else 1
+        proxima = (date.today() + timedelta(days=intervalo)).isoformat()
+        conexao.execute("""
+            UPDATE tentativas_aulas SET acertou = ?, intervalo_dias = ?, proxima_revisao = ?
+            WHERE id = ?
+        """, (int(acertou), intervalo, proxima, tentativa_id))
+        modulo_id = tentativa["modulo_id"]
+    flash("Ótimo: exercício marcado para revisão espaçada." if acertou else "Tudo bem: este exercício voltou para sua revisão de amanhã.", "sucesso")
+    return redirect(url_for("visualizar_modulo", modulo_id=modulo_id) + f"#aula-{aula_id}")
 
 
 # ==========================================
@@ -1849,7 +2180,20 @@ def alternar_conclusao_aula(aula_id):
 # ==========================================
 
 @app.route("/")
+@app.route("/organizacao", endpoint="organizacao")
+@app.route("/biblioteca", endpoint="biblioteca")
 def inicio():
+    pagina = {
+        "inicio": "painel",
+        "organizacao": "organizacao",
+        "biblioteca": "biblioteca",
+    }.get(request.endpoint, "painel")
+    if request.endpoint == "inicio" and any(
+        chave in request.args
+        for chave in ("pesquisa", "materia", "categoria", "favoritas", "ordenar")
+    ):
+        # Pesquisas legadas pelo endereço inicial levam direto à biblioteca.
+        pagina = "biblioteca"
     pesquisa = request.args.get("pesquisa", "").strip()[:200]
     materia_selecionada = request.args.get("materia", "").strip()
     categoria_selecionada = request.args.get("categoria", "").strip()
@@ -2094,6 +2438,20 @@ def inicio():
             LIMIT 1
         """).fetchone()
 
+        revisoes_questoes = conexao.execute("""
+            SELECT COUNT(*) FROM questoes q
+            WHERE q.proxima_revisao <= date('now','localtime') OR NOT EXISTS
+                (SELECT 1 FROM tentativas_questoes t WHERE t.questao_id = q.id)
+        """).fetchone()[0]
+        revisoes_aulas = conexao.execute("""
+            SELECT COUNT(*) FROM tentativas_aulas ta
+            WHERE ta.id = (SELECT MAX(ultima.id) FROM tentativas_aulas ultima WHERE ultima.aula_id = ta.aula_id)
+              AND ta.proxima_revisao <= date('now','localtime')
+        """).fetchone()[0]
+        revisoes_flashcards = conexao.execute("""
+            SELECT COUNT(*) FROM flashcards WHERE proxima_revisao <= date('now','localtime')
+        """).fetchone()[0]
+
     progresso_cursos = (
         round(aulas_concluidas / total_aulas * 100)
         if total_aulas > 0 else 0
@@ -2144,8 +2502,18 @@ def inicio():
             ),
         })
 
+    nome_usuario = (session.get("usuario_nome") or "estudante").split()[0]
+    titulos_pagina = {
+        "painel": (f"Olá, {nome_usuario}.", "Um passo de cada vez. Veja seu ritmo e escolha por onde continuar."),
+        "organizacao": ("Organize seus estudos.", "Defina metas realistas e acompanhe seu planejamento."),
+        "biblioteca": ("Sua biblioteca de estudos.", "Guarde, encontre e revisite o que você aprendeu."),
+    }
+    titulo_pagina, descricao_pagina = titulos_pagina[pagina]
     return render_template(
         "index.html",
+        pagina=pagina,
+        titulo_pagina=titulo_pagina,
+        descricao_pagina=descricao_pagina,
         anotacoes=anotacoes,
         materias=materias,
         materias_cadastradas=materias_cadastradas,
@@ -2177,9 +2545,87 @@ def inicio():
         total_modulos=total_modulos,
         total_aulas=total_aulas,
         aulas_concluidas=aulas_concluidas,
+        total_revisoes_pendentes=revisoes_questoes + revisoes_aulas + revisoes_flashcards,
         progresso_cursos=progresso_cursos,
         cursos_painel=cursos_painel,
         proxima_aula=proxima_aula
+    )
+
+
+@app.route("/foco")
+def foco():
+    with conexao_aberta() as conexao:
+        materias_cadastradas = [
+            materia["nome"] for materia in buscar_materias(conexao)
+        ]
+    return render_template("foco.html", materias_cadastradas=materias_cadastradas)
+
+
+@app.route("/progresso")
+def progresso():
+    nomes_dias = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+    with conexao_aberta() as conexao:
+        sessoes_semana = conexao.execute("""
+            WITH RECURSIVE dias(data_estudo, indice) AS (
+                SELECT date('now', 'localtime', '-6 days'), 0
+                UNION ALL
+                SELECT date(data_estudo, '+1 day'), indice + 1
+                FROM dias WHERE indice < 6
+            )
+            SELECT dias.data_estudo,
+                   COALESCE(SUM(sessoes_estudo.duracao_minutos), 0) AS minutos
+            FROM dias
+            LEFT JOIN sessoes_estudo
+                ON sessoes_estudo.data_estudo = dias.data_estudo
+            GROUP BY dias.data_estudo, dias.indice
+            ORDER BY dias.indice
+        """).fetchall()
+        comparativo = conexao.execute("""
+            WITH limites AS (
+                SELECT date('now','localtime','weekday 0','-6 days') AS inicio_atual,
+                       date('now','localtime','weekday 0','-13 days') AS inicio_anterior,
+                       (CAST(strftime('%w','now','localtime') AS INTEGER)+6)%7 AS dias,
+                       date('now','localtime') AS hoje
+            )
+            SELECT COALESCE(SUM(CASE WHEN data_estudo BETWEEN inicio_atual AND hoje
+                         THEN duracao_minutos ELSE 0 END),0) AS atual,
+                   COALESCE(SUM(CASE WHEN data_estudo >= inicio_anterior
+                         AND data_estudo < date(inicio_anterior,'+'||(dias+1)||' days')
+                         THEN duracao_minutos ELSE 0 END),0) AS anterior
+            FROM limites LEFT JOIN sessoes_estudo
+                ON data_estudo >= inicio_anterior AND data_estudo <= hoje
+        """).fetchone()
+        materia_destaque = conexao.execute("""
+            SELECT materia, SUM(duracao_minutos) AS minutos
+            FROM sessoes_estudo
+            WHERE data_estudo BETWEEN date('now','localtime','weekday 0','-6 days')
+                AND date('now','localtime')
+            GROUP BY materia ORDER BY minutos DESC, materia COLLATE NOCASE LIMIT 1
+        """).fetchone()
+        total_geral = conexao.execute(
+            "SELECT COALESCE(SUM(duracao_minutos),0) FROM sessoes_estudo"
+        ).fetchone()[0]
+        sessoes_total = conexao.execute(
+            "SELECT COUNT(*) FROM sessoes_estudo"
+        ).fetchone()[0]
+
+    minutos_dia = [item["minutos"] for item in sessoes_semana]
+    maior_dia = max(minutos_dia, default=0)
+    estudo_semana = [{
+        "rotulo": nomes_dias[date.fromisoformat(item["data_estudo"]).weekday()],
+        "minutos": item["minutos"],
+        "percentual": round(item["minutos"] / maior_dia * 100) if maior_dia else 0,
+    } for item in sessoes_semana]
+    minutos_atual = comparativo["atual"]
+    minutos_anterior = comparativo["anterior"]
+    diferenca = minutos_atual - minutos_anterior
+    variacao = round(diferenca / minutos_anterior * 100) if minutos_anterior else None
+    return render_template(
+        "progresso.html", estudo_semana=estudo_semana,
+        minutos_semana=sum(minutos_dia), dias_ativos=sum(x > 0 for x in minutos_dia),
+        minutos_atual=minutos_atual, minutos_anterior=minutos_anterior,
+        diferenca=diferenca, variacao=variacao, materia_destaque=materia_destaque,
+        total_geral=total_geral, sessoes_total=sessoes_total,
     )
 
 
@@ -2205,7 +2651,7 @@ def nova_anotacao():
         or categoria not in CATEGORIAS
     ):
         flash("Confira os campos da anotação e tente novamente.", "erro")
-        return redirect(url_for("inicio"))
+        return redirect(url_for("biblioteca"))
 
     with conexao_aberta() as conexao:
         assunto_id, erro_assunto = validar_assunto_da_materia(
@@ -2215,7 +2661,7 @@ def nova_anotacao():
         )
         if erro_assunto:
             flash(erro_assunto, "erro")
-            return redirect(url_for("inicio") + "#nova-anotacao")
+            return redirect(url_for("biblioteca") + "#nova-anotacao")
 
         conexao.execute("""
             INSERT INTO anotacoes
@@ -2224,7 +2670,7 @@ def nova_anotacao():
         """, (titulo, materia, conteudo, categoria, assunto_id))
 
     flash("Anotação cadastrada com sucesso!", "sucesso")
-    return redirect(url_for("inicio"))
+    return redirect(url_for("biblioteca"))
 
 
 # ==========================================
@@ -2233,6 +2679,13 @@ def nova_anotacao():
 
 @app.route("/registrar-estudo", methods=["POST"])
 def registrar_estudo():
+    endpoint_retorno = request.form.get("retorno", "foco")
+    urls_retorno = {
+        "foco": url_for("foco"),
+        "organizacao": url_for("organizacao"),
+        "inicio": url_for("inicio"),
+    }
+    url_retorno = urls_retorno.get(endpoint_retorno, url_for("foco"))
     materia = validar_texto(
         request.form.get("materia", ""),
         60
@@ -2248,19 +2701,19 @@ def registrar_estudo():
 
     if materia not in materias_cadastradas:
         flash("Selecione uma matéria válida.", "erro")
-        return redirect(url_for("inicio"))
+        return redirect(url_retorno)
 
     duracao = validar_inteiro(duracao_texto, 1, 1440)
 
     if duracao is None:
         flash("A duração deve ser entre 1 e 1.440 minutos.", "erro")
-        return redirect(url_for("inicio"))
+        return redirect(url_retorno)
 
     try:
         identificador = str(uuid.UUID(identificador_texto))
     except (ValueError, TypeError, AttributeError):
         flash("Identificador da sessão inválido.", "erro")
-        return redirect(url_for("inicio"))
+        return redirect(url_retorno)
 
     with conexao_aberta() as conexao:
         conexao.execute("""
@@ -2271,7 +2724,7 @@ def registrar_estudo():
         """, (materia, duracao, identificador))
 
     flash("Sessão de estudo registrada!", "sucesso")
-    return redirect(url_for("inicio"))
+    return redirect(url_retorno)
 
 
 # ==========================================
@@ -2377,7 +2830,7 @@ def definir_meta():
 
     if minutos is None:
         flash("A meta deve ser entre 1 e 1.440 minutos.", "erro")
-        return redirect(url_for("inicio"))
+        return redirect(url_for("organizacao"))
 
     with conexao_aberta() as conexao:
         conexao.execute("""
@@ -2388,7 +2841,7 @@ def definir_meta():
         """, (minutos,))
 
     flash("Meta diária atualizada!", "sucesso")
-    return redirect(url_for("inicio"))
+    return redirect(url_for("organizacao"))
 
 
 @app.route("/meta-semanal", methods=["POST"])
@@ -2410,7 +2863,7 @@ def definir_meta_semanal():
             "Informe uma matéria válida e uma meta entre 0 e 10.080 minutos.",
             "erro"
         )
-        return redirect(url_for("inicio") + "#metas-materias")
+        return redirect(url_for("organizacao") + "#metas-materias")
 
     with conexao_aberta() as conexao:
         materia = conexao.execute(
@@ -2420,7 +2873,7 @@ def definir_meta_semanal():
 
         if materia is None:
             flash("A matéria selecionada não existe.", "erro")
-            return redirect(url_for("inicio") + "#metas-materias")
+            return redirect(url_for("organizacao") + "#metas-materias")
 
         if minutos == 0:
             conexao.execute(
@@ -2438,7 +2891,7 @@ def definir_meta_semanal():
             mensagem = "Meta semanal salva!"
 
     flash(mensagem, "sucesso")
-    return redirect(url_for("inicio") + "#metas-materias")
+    return redirect(url_for("organizacao") + "#metas-materias")
 
 
 # ==========================================
@@ -2524,7 +2977,7 @@ def editar_anotacao(id):
             ))
 
             flash("Anotação atualizada com sucesso!", "sucesso")
-            return redirect(url_for("inicio"))
+            return redirect(url_for("biblioteca"))
 
     return render_template(
         "editar.html",
@@ -2557,7 +3010,7 @@ def excluir_anotacao(id):
         """, (id,))
 
     flash("Anotação excluída com sucesso!", "sucesso")
-    return redirect(url_for("inicio"))
+    return redirect(url_for("biblioteca"))
 
 
 # ==========================================
@@ -2589,7 +3042,7 @@ def favoritar_anotacao(id):
     else:
         flash("Anotação removida dos favoritos!", "sucesso")
 
-    return redirect(url_for("inicio"))
+    return redirect(url_for("biblioteca"))
 
 
 # ==========================================
