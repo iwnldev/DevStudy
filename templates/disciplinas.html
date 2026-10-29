@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Minhas disciplinas | DevStudy</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='pomodoro.css') }}">
 </head>
 <body class="pagina-disciplinas">
     <main class="container">
@@ -169,5 +170,7 @@
             {% endif %}
         </section>
     </main>
+{% include "_pomodoro_widget.html" %}
+<script src="{{ url_for('static', filename='pomodoro.js') }}" defer></script>
 </body>
 </html>
